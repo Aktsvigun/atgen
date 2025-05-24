@@ -18,7 +18,6 @@ from transformers import (
 )
 
 from .base_strategy import Strategy
-from ..utils.generate import generate
 
 
 log = logging.getLogger()
@@ -74,7 +73,11 @@ def te_delfy(
     preprocessed_labeled_pool = preprocess_delfy(labeled_pool[input_column_name])
 
     ranks = token_entropy_ranks(
-        model, tokenizer, unlabeled_pool["input"], config, **generation_kwargs
+        model,
+        tokenizer,
+        unlabeled_pool[MESSAGES_COLUMN_NAME],
+        config,
+        **generation_kwargs,
     ) + delfy_ranks(
         preprocessed_unlabeled_pool, preprocessed_labeled_pool, lambda1, lambda2
     )
@@ -137,7 +140,7 @@ def preprocess_delfy(pool: list[str]) -> list[list[str]]:
     Paper does not state whether preprocessing is necessary
     We apply the following:
     1. Make text lowercase
-    2. Split using RegexpTokenizer from nltk with r"\w+"
+    2. Split using RegexpTokenizer from nltk with r"\\w+"
     3. Apply PorterStemmer from nltk to each word
     """
     tokenizer = RegexpTokenizer(r"\w+")

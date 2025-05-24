@@ -1,26 +1,45 @@
 import gc
 from math import ceil
 from pathlib import Path
-import subprocess
+from typing import Union, Any
+import logging
 
 from datasets import Dataset
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader
-from torch import bfloat16, float16, cuda, no_grad
-from tqdm import tqdm
-from transformers import PreTrainedModel, PreTrainedTokenizer, DataCollatorForSeq2Seq
 
-from .load_data import tokenize_dataset
+from torch.utils.data import DataLoader
+from torch import bfloat16, float16, cuda, no_grad, LongTensor
+from tqdm import tqdm
+from transformers import PreTrainedModel, PreTrainedTokenizer
+from vllm import LLM
+
+if cuda.is_available():
+    from unsloth import FastLanguageModel
+
+from .constants import (
+    DEFAULT_GPU_MEMORY_UTILIZATION,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TOP_P,
+    MESSAGES_COLUMN_NAME,
+    DEEPSEEK_R1_END_REASONING_TOKEN,
+)
+
+from .training_utils import _get_data_collator
+from .find_response_token_ids_in_text import find_response_token_ids_in_text
+
+
+log = logging.getLogger()
 
 
 def generate_vllm(
-    config: DictConfig,
+    inference_config: DictConfig,
     data: Dataset,
+    data_config: DictConfig,
     model: PreTrainedModel = None,
     tokenizer: PreTrainedTokenizer = None,
     save_dir: str | Path = "tmp",
-    model_tokenizer_dir: str | Path = None,
-    llm_runner: "LLM" = None,
+    model_tokenizer_dir: Union[str, Path, None] = None,
+    llm_runner: LLM | None = None,
     **useless_kwargs,
 ) -> list[str]:
     """
@@ -29,7 +48,7 @@ def generate_vllm(
     Requires either model + tokenizer + save_dir or the path to the saved model and tokenizer.
     In the last case, they need to be stored inside "PATH/model" and "PATH/tokenizer".
     """
-    from vllm import LLM, SamplingParams
+    from vllm import SamplingParams
 
     delete_vllm_after_inference = False
     if llm_runner is None:
@@ -37,10 +56,12 @@ def generate_vllm(
             model.save_pretrained(f"{save_dir}/model")
             tokenizer.save_pretrained(f"{save_dir}/tokenizer")
             model_tokenizer_dir = save_dir
-        gpu_memory_utilization = getattr(config, "gpu_memory_utilization", 0.5)
+        gpu_memory_utilization = getattr(
+            inference_config, "gpu_memory_utilization", DEFAULT_GPU_MEMORY_UTILIZATION
+        )
         llm_runner = LLM(
-            f"{model_tokenizer_dir}/model",
-            f"{model_tokenizer_dir}/tokenizer",
+            model=f"{model_tokenizer_dir}/model",
+            tokenizer=f"{model_tokenizer_dir}/tokenizer",
             gpu_memory_utilization=gpu_memory_utilization,  # TODO: make arbitrary
             dtype=bfloat16,
             trust_remote_code=True,
@@ -52,19 +73,28 @@ def generate_vllm(
     cuda.empty_cache()
 
     params = SamplingParams(
-        temperature=config.temperature,
+        temperature=inference_config.get("temperature", DEFAULT_TEMPERATURE),
         seed=42,  # TODO: make arbitrary
-        max_tokens=config.max_new_tokens,
-        top_p=config.top_p,
+        max_tokens=inference_config.max_new_tokens,
+        top_p=inference_config.get("top_p", DEFAULT_TOP_P),
     )
 
     generations = []
-    num_batches = ceil(len(data) / config.batch_size)
+    num_batches = ceil(len(data) / inference_config.batch_size)
     for i in tqdm(range(num_batches)):
-        batch = data[i * config.batch_size : (i + 1) * config.batch_size]["input"]
-        out = llm_runner.generate(batch, params, use_tqdm=False)
-        outputs = [x.outputs[0].text for x in out]
-        generations += outputs
+        batch = data[
+            i * inference_config.batch_size : (i + 1) * inference_config.batch_size
+        ][MESSAGES_COLUMN_NAME]
+        out = llm_runner.chat(batch, params, use_tqdm=False)
+        batch_generations = [x.outputs[0].text for x in out]
+        generations += batch_generations
+
+    # Remove reasoning tokens from DeepSeek-R1
+    if "deepseek-r1" in llm_runner.llm_engine.model_config.model:
+        for i, generation in enumerate(generations):
+            generations[i] = DEEPSEEK_R1_END_REASONING_TOKEN.join(
+                generation.split(DEEPSEEK_R1_END_REASONING_TOKEN)[1:]
+            ).strip()
 
     if delete_vllm_after_inference:
         del llm_runner
@@ -73,171 +103,218 @@ def generate_vllm(
     return generations
 
 
+def generate_sglang() -> list[str]:
+    """
+    Function for generating with the SGLang framework.
+    Requires either model + tokenizer or the path to the saved model and tokenizer.
+    """
+    pass
+
+
+def generate_sglang(
+    inference_config: DictConfig,
+    data: Dataset,
+    data_config: DictConfig,
+    model: PreTrainedModel = None,
+    tokenizer: PreTrainedTokenizer = None,
+    save_dir: str | Path = "tmp",
+    model_tokenizer_dir: Union[str, Path, None] = None,
+    **useless_kwargs,
+) -> list[str]:
+    """
+    Function for generating with the SGLang framework.
+    Requires either model + tokenizer or the path to the saved model and tokenizer.
+    """
+    import sglang as sgl
+    import os
+
+    # Determine the model path
+    if model_tokenizer_dir is None:
+        if model is not None and tokenizer is not None:
+            model.save_pretrained(f"{save_dir}/model")
+            tokenizer.save_pretrained(f"{save_dir}/tokenizer")
+            model_path = f"{save_dir}/model"
+        else:
+            raise ValueError(
+                "Either model_tokenizer_dir or model and tokenizer must be provided"
+            )
+    else:
+        model_path = f"{model_tokenizer_dir}/model"
+
+    # Free up memory
+    del model
+    gc.collect()
+    cuda.empty_cache()
+
+    # Get generation parameters
+    temperature = inference_config.get("temperature", DEFAULT_TEMPERATURE)
+    top_p = inference_config.get("top_p", DEFAULT_TOP_P)
+    max_tokens = inference_config.max_new_tokens
+
+    # Initialize SGLang engine
+    engine = sgl.Runtime(
+        model=model_path,
+        model_config={
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+        },
+    )
+
+    # Define generation function using SGLang
+    @sgl.function
+    def generate_response(s, messages):
+        # Apply chat template
+        for message in messages:
+            role = message.get("role", "")
+            content = message.get("content", "")
+
+            if role == "system":
+                s += f"System: {content}\n"
+            elif role == "user":
+                s += f"User: {content}\n"
+            elif role == "assistant":
+                s += f"Assistant: {content}\n"
+
+        # Generate the response
+        s += "Assistant: " + sgl.gen("response")
+        return s["response"]
+
+    # Generate responses
+    generations = []
+    num_batches = ceil(len(data) / inference_config.batch_size)
+
+    for i in tqdm(range(num_batches)):
+        batch = data[
+            i * inference_config.batch_size : (i + 1) * inference_config.batch_size
+        ][MESSAGES_COLUMN_NAME]
+
+        # Use SGLang to generate responses
+        batch_results = engine.run_batch(
+            [generate_response.bind(messages=messages) for messages in batch]
+        )
+
+        # Extract generated text
+        batch_generations = [result.outputs["response"] for result in batch_results]
+        generations += batch_generations
+
+    # Clean up
+    engine.shutdown()
+    return generations
+
+
 def generate_transformers(
-    config: DictConfig,
+    inference_config: DictConfig,
     data: Dataset,
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
     data_config: DictConfig = None,
-    model_config: DictConfig = None,
     **useless_kwargs,
 ) -> list:
     # Tokenize dataset if necessary
     if "input_ids" not in data.column_names:
-        data = tokenize_dataset(
-            data_config=data_config,
-            model_config=model_config,
-            dataset=data,
-            tokenizer=tokenizer,
-            split="test",
+        data = data.map(
+            tokenize_conversational_example,
+            batched=False,
+            fn_kwargs={"tokenizer": tokenizer},
         )
+
+    data_collator = _get_data_collator(
+        tokenizer=tokenizer, model_config=inference_config.model
+    )
     dataloader = DataLoader(
         data.remove_columns(
             [x for x in data.column_names if x not in ("input_ids", "attention_mask")]
         ),
-        batch_size=config.batch_size,
-        collate_fn=DataCollatorForSeq2Seq(tokenizer),
+        batch_size=inference_config.batch_size,
+        collate_fn=data_collator,
         shuffle=False,
     )
 
-    if model.dtype != float16:
-        model = model.to(float16)
     if cuda.is_available() and model.device.type != "cuda":
         model = model.cuda()
+    if cuda.is_available():
+        FastLanguageModel.for_inference(model)
+
     generations = []
     with no_grad():
         for batch in tqdm(dataloader):
-            out = model.generate(
-                batch["input_ids"].to(model.device),
-                attention_mask=batch["attention_mask"].to(model.device),
-                max_new_tokens=config.max_new_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-            # outputs = tokenizer.batch_decode(out.sequences, True)
-            outputs_only = [
-                tokenizer.decode(x[len(y) :], True).strip()
-                for (x, y) in zip(out.sequences, batch["input_ids"])
-            ]
-            generations += outputs_only
+            try:
+                out = model.generate(
+                    batch["input_ids"].to(model.device),
+                    attention_mask=batch["attention_mask"].to(model.device),
+                    max_new_tokens=inference_config.max_new_tokens,
+                    temperature=inference_config.get(
+                        "temperature", DEFAULT_TEMPERATURE
+                    ),
+                    top_p=inference_config.get("top_p", DEFAULT_TOP_P),
+                    return_dict_in_generate=True,
+                    output_scores=True,
+                )
+                outputs_only = []
+                for output in out.sequences:
+                    seq_only = find_response_token_ids_in_text(
+                        output.tolist(), data_collator.response_token_ids
+                    )
+                    outputs_only.append(tokenizer.decode(seq_only, True).strip())
+                generations += outputs_only
+            except Exception as e:
+                print(f"Error in model.generate: {e}")
+                # Add empty strings for this batch to maintain alignment with input data
+                generations += [""] * len(batch["input_ids"])
     return generations
 
 
-def generate_tllm(
-    config: DictConfig,
-    data: Dataset,
-    model: PreTrainedModel,
-    tokenizer: PreTrainedTokenizer,
-    **useless_kwargs,
-) -> list:
-    from tensorrt_llm.runtime.model_runner_cpp_new import ModelRunnerCpp
-
-    model.save_pretrained(f"tmp/{exp_name}/model")
-    tokenizer.save_pretrained(f"tmp/{exp_name}/model")
-
-    os.chdir("TensorRT-LLM/examples/llama/")
-    subprocess.run(
-        [
-            "python",
-            "./convert_checkpoint.py",
-            "--model_dir",
-            f"../../../tmp/{exp_name}_best/model",
-            "--output_dir",
-            f"../../../tmp/{exp_name}_best/tllm_checkpoint",
-            "--dtype",
-            "float16",
-        ]
-    )
-    os.chdir("../../..")
-    subprocess.run(
-        [
-            "trtllm-build",
-            "--checkpoint_dir",
-            f"./tmp/{exp_name}_best/tllm_checkpoint",
-            "--output_dir",
-            f"./tmp/{exp_name}_best/tllm_model",
-            "--gemm_plugin",
-            "float16",
-            "--max_batch_size",
-            str(config.inference.batch_size),
-            "--max_input_len",
-            "1250",
-            "--max_output_len",
-            str(max_new_tokens),
-            "--gather_all_token_logits",
-        ]
-    )
-
-    runner = ModelRunnerCpp.from_dir(
-        engine_dir=f"./tmp/{exp_name}_best/tllm_model",
-        lora_dir=None,
-        rank=0,
-        lora_ckpt_source="hf",
-        max_batch_size=config.inference.batch_size,
-        max_input_len=1250,
-        max_output_len=max_new_tokens,
-        max_beam_width=1,
-        max_attention_window_size=4096,
-        sink_token_length=None,
-        free_gpu_memory_fraction=0.2,
-    )
-
-    generations_with_inputs = []
-    for batch in tqdm(dataloader):
-        with torch.no_grad():
-            outputs = runner.generate(
-                batch["input_ids"],
-                max_new_tokens=max_new_tokens,
-                end_id=tokenizer.eos_token_id,
-                pad_id=tokenizer.eos_token_id,
-                do_sample=False,
-                streaming=False,
-                output_sequence_lengths=True,
-                return_dict=True,
-            )
-            generations_with_inputs += tokenizer.batch_decode(
-                outputs["output_ids"][:, 0], True
-            )
-
-    generations = []
-    for i, gen_with_input in enumerate(generations_with_inputs):
-        gen_splitted = gen_with_input.split("\nSummary:\n")
-        if len(gen_splitted) > 1:
-            gen = gen_splitted[1].strip().split("\n")[0].strip()
-        else:
-            gen = tokenizer.decode(
-                tokenizer(gen_with_input, max_length=2048)["input_ids"][
-                    -max_new_tokens:
-                ]
-            )
-        generations.append(gen)
-
-
 def generate(
-    config: DictConfig,
+    inference_config: DictConfig,
     data: Dataset,
+    model: PreTrainedModel = None,
+    tokenizer: PreTrainedTokenizer = None,
+    save_dir: str | Path = "tmp",
+    data_config: DictConfig = None,
+    model_config: DictConfig = None,
     **kwargs,
 ) -> list[str]:
-    framework = config.framework
+    framework = inference_config.framework
     if framework == "vllm":
         return generate_vllm(
-            config=config,
+            inference_config=inference_config,
             data=data,
+            model=model,
+            tokenizer=tokenizer,
+            save_dir=save_dir,
+            data_config=data_config,
             **kwargs,
         )
     elif framework == "transformers":
         return generate_transformers(
-            config=config,
+            inference_config=inference_config,
             data=data,
+            model=model,
+            tokenizer=tokenizer,
+            save_dir=save_dir,
+            data_config=data_config,
+            model_config=model_config,
             **kwargs,
         )
-    elif framework == "tllm":
-        return generate_tllm(
-            config=config,
+    elif framework == "sglang":
+        return generate_sglang(
+            inference_config=inference_config,
             data=data,
+            data_config=data_config,
+            model=model,
+            tokenizer=tokenizer,
+            save_dir=save_dir,
+            model_tokenizer_dir=kwargs.get("model_tokenizer_dir"),
             **kwargs,
         )
     else:
         raise NotImplementedError
+
+
+def tokenize_conversational_example(
+    example: dict[str, Any], tokenizer: PreTrainedTokenizer
+) -> dict[str, list[int]]:
+    input_ids = tokenizer.apply_chat_template(example["messages"])
+    attention_mask = [1 for _ in range(len(input_ids))]
+    return {"input_ids": input_ids, "attention_mask": attention_mask}

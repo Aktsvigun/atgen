@@ -1,37 +1,38 @@
 defaults:
   - labeller: golden
   - data: test
+  - al: random
 
+experiment_name: test
 name: test
 output_dir: outputs
 offline_mode: False
 cache_dir: cache
 seed: 42
 al:
-    strategy: random
     init_query_size: 2
     query_size: 2
     num_iterations: 1
+    evaluate_zero_iteration: True
     subsample_size: -1
     required_performance:
         rouge1: 0.5
     budget:
-    strategy_kwargs:
-        lambda_: 0.17
-    additional_metrics: []
 
 model:
-    checkpoint: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    checkpoint:  Qwen/Qwen2.5-0.5B-Instruct
     quantize: False
-    model_max_length: ${data.input_max_length}
-    dtype: float16
-    separator: "<|assistant|>\n"
+    model_max_length: ${multiply_with_few_shot:${data.input_max_length},${data.few_shot.count}}
+    dtype: bfloat16
+    save_in_fp_32: false
     peft:
         use: True
         r: 64
         lora_alpha: 64
         lora_dropout: 0.1
         bias: 'none'
+        seed: ${seed}
+        use_gradient_checkpointing: 'unsloth'
         modules:
 
 training:
@@ -46,12 +47,30 @@ training:
         weight_decay: 0.01
         max_grad_norm: 1.
         early_stopping_patience: 5
-        optimizer: adamw_hf
+        model_max_length: ${model.model_max_length}
+        dataset_num_proc: ${data.num_proc}
+        packing: False
+        lr_scheduler_type: cosine
+        gradient_checkpointing: True
 
 inference:
     framework: 'transformers'
     max_new_tokens: ${data.output_max_length}
     batch_size: 8
     gpu_memory_utilization: 0.5
-    temperature: 0.
-    top_p: 0.5
+    temperature: 0.6
+    top_p: 0.1
+    model: ${model.checkpoint}
+
+evaluation:
+    additional_metrics: []
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key:
+    model: anthropic/claude-3-7-sonnet
+    deepeval_threshold: 0.5
+    deepeval_include_reason: False
+    deepeval_strict_mode: False
+    deepeval_async_mode: True
+    deepeval_verbose_mode: False
+    deepeval_truths_extraction_limit: 10

@@ -2,11 +2,12 @@ from datasets import Dataset
 from pathlib import Path
 from omegaconf import DictConfig
 from torch import bfloat16, cuda
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizerFast
+from vllm import LLM
 import gc
 
 from .base_labeller import BaseLabeler
-from ..utils.load_model_tokenizer import load_model, load_tokenizer
+from ..utils.load_model_tokenizer import load_model_tokenizer
 from ..utils.generate import generate
 
 
@@ -77,9 +78,7 @@ class CustomLLMLabeller(BaseLabeler):
                 "model_config": self.model_config,
             }
 
-    def _load_runner_vllm(self) -> dict[str, "LLM"]:
-        from vllm import LLM
-
+    def _load_runner_vllm(self) -> dict[str, LLM]:
         gpu_memory_utilization = getattr(
             self.config.inference, "gpu_memory_utilization", 0.5
         )
@@ -96,9 +95,9 @@ class CustomLLMLabeller(BaseLabeler):
         # Make it a dict because different frameworks can have different kwargs
         return {"llm_runner": vllm}
 
-    def _load_model_and_tokenizer(self) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
-        tokenizer = load_tokenizer(self.config.model, self.cache_dir)
-        model = load_model(
+    def _load_model_and_tokenizer(
+        self,
+    ) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+        return load_model_tokenizer(
             self.config.model.checkpoint, self.config.model, self.cache_dir
         )
-        return model, tokenizer

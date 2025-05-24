@@ -1,16 +1,12 @@
-dataset: aeslc
+dataset: SpeedOfMagic/gigaword_tiny
 fetch_kwargs: {}
-has_test: true
-input_column_name: email_body
+unlabeled_data_split_name: train
+test_split_name: test
+input_column_name: document
 input_max_length: 256
-output_column_name: subject_line
+is_in_conversational_format: false
+output_column_name: summary
 output_max_length: 20
-prompt: 'Write a subject line for the email:
-
-
-  {text}
-
-
-  Subject line:'
+system_prompt: "Write a summary for the article in lowercase."
 test_subset_size: 100
-train_subset_size: 1000
+train_subset_size: 100

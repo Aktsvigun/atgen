@@ -10,14 +10,22 @@ class BLEUVarStrategy(Strategy):
         super().__init__()
 
     def __call__(
-        self, model: PreTrainedModel, unlabeled_pool: Dataset, num_to_label: int, *args, **kwargs
+        self,
+        model: PreTrainedModel,
+        unlabeled_pool: Dataset,
+        num_to_label: int,
+        *args,
+        **kwargs,
     ) -> list[int]:
         return bleuvar(model, unlabeled_pool, num_to_label)[0]
 
 
 # https://arxiv.org/pdf/2006.08344.pdf
 def bleuvar(
-    model, X_pool: Dataset, n_instances: int, **kwargs,
+    model,
+    X_pool: Dataset,
+    n_instances: int,
+    **kwargs,
 ):
     mc_iterations = kwargs.get("mc_iterations", 10)
     metric_name = kwargs.get("var_metric", "bleu")

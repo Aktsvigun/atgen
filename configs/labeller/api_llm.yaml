@@ -1,6 +1,7 @@
 type: api_llm
 provider: openai
 api_key: 'api_key.key'
+mode: sync  # or batched
 parameters:
   model: gpt-4o
   max_tokens: 512

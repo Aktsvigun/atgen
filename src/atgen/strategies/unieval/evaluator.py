@@ -33,7 +33,7 @@ class SumEvaluator:
         n_data = len(data)
         eval_scores = [{} for _ in range(n_data)]
 
-        if dims == None:
+        if dims is None:
             eval_dims = self.dimensions
         else:
             assert isinstance(dims, list)
@@ -98,7 +98,7 @@ class SumEvaluator:
                 eval_scores[i][dim] = score[i]
 
         # Customize your overall score here.
-        if overall == True:
+        if overall:
             for i in range(n_data):
                 eval_scores[i]["overall"] = np.mean(list(eval_scores[i].values()))
 

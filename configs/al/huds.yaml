@@ -1,0 +1,10 @@
+# HUDS strategy configuration
+strategy: huds
+strategy_kwargs:
+  lambda_: 0.5
+  embeddings_model_checkpoint: google-bert/bert-large-uncased
+  embeddings_batch_size: 64
+  model_is_causallm: false
+  model_max_length: 512
+  torch_dtype: float16
+  random_init: false

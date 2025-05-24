@@ -3,15 +3,30 @@ from .base_strategy import Strategy
 from datasets import Dataset
 from transformers import PreTrainedModel
 
+import numpy as np
+import torch
+
+
+import logging
+
 
 class IDDSStrategy(Strategy):
-    def __init__(self):
+    def __init__(self, seed=None):
         super().__init__()
+        self.seed = seed
 
     def __call__(
-        self, model: PreTrainedModel, unlabeled_pool: Dataset, num_to_label: int, *args, **kwargs
+        self,
+        model: PreTrainedModel,
+        unlabeled_pool: Dataset,
+        labeled_pool: Dataset,
+        num_to_label: int,
+        *args,
+        **kwargs,
     ) -> list[int]:
-        return idds_sampling(model, unlabeled_pool, num_to_label)[0]
+        return idds_sampling(
+            model, unlabeled_pool, num_to_label, labeled_pool, seed=self.seed
+        )[0]
 
 
 def idds_sampling(
@@ -30,7 +45,9 @@ def idds_sampling(
     filtering_mode = kwargs.get("filtering_mode", None)
     batch_size = kwargs.get("embeddings_batch_size", 100)
 
-    log.info(f"Used similarities function: {sims_func}; u-top: {u_top}; l-top: {l_top}")
+    logging.info(
+        f"Used similarities function: {sims_func}; u-top: {u_top}; l-top: {l_top}"
+    )
 
     if filtering_mode is not None:
         uncertainty_threshold = kwargs.get("uncertainty_threshold", 0.0)

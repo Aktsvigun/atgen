@@ -10,6 +10,7 @@ from pathlib import Path
 from shutil import rmtree
 
 from ..base_labeller import BaseLabeler
+from ...utils.constants import DEEPSEEK_R1_END_REASONING_TOKEN, MESSAGES_COLUMN_NAME
 
 
 log = logging.getLogger()
@@ -59,15 +60,86 @@ class OpenAILabeller(BaseLabeler):
         config: DictConfig,
         output_column_name: str = "output",
         budget: int = 1_000_000,
+        base_url: str = None,
     ):
         super().__init__(output_column_name, budget)
         self.config = config
         # Create the OpenAI client
-        self.client = OpenAI(api_key=self.config.api_key)
+        kwargs = {} if base_url is None else {"base_url": base_url}
+        self.client = OpenAI(api_key=self.config.api_key, **kwargs)
+        self.mode = config.get("mode")
 
-    def __call__(self, dataset: Dataset) -> Dataset:
+    def _sync_call(self, dataset: Dataset) -> Dataset:
+        # Process each input in the dataset with individual API calls
+        data = dataset[MESSAGES_COLUMN_NAME]
+        annotations = []
+        total_price = 0
 
-        data = dataset["input"]
+        for text in tqdm(data, desc="Processing with OpenAI API"):
+            # Prepare messages for this input
+            text_messages = deepcopy(messages_template)
+            text_messages[-1]["content"] = text
+
+            # Make API call with retries
+            for attempt in range(MAX_NUM_TRIES):
+                try:
+                    response = self.client.chat.completions.create(
+                        messages=text_messages, **self.config.parameters
+                    )
+                    break
+                except Exception as e:
+                    log.warning(f"Attempt {attempt+1}/{MAX_NUM_TRIES} failed: {str(e)}")
+                    if attempt == MAX_NUM_TRIES - 1:
+                        log.error(
+                            f"Failed to process input after {MAX_NUM_TRIES} attempts"
+                        )
+                        annotations.append("")
+                        continue
+                    time.sleep(2**attempt)  # Exponential backoff
+
+            # Extract and store the response
+            content = response.choices[0].message.content.strip()
+            annotations.append(content)
+
+            # Calculate price for this specific call
+            call_price = (
+                response.usage.prompt_tokens
+                * self.config.price.input_per_1m
+                / 1_000_000
+                + response.usage.completion_tokens
+                * self.config.price.output_per_1m
+                / 1_000_000
+            )
+            total_price += call_price
+
+            # Check if budget is depleted
+            if self.budget <= total_price:
+                self.is_out_of_budget = True
+                # Fill remaining annotations with empty strings
+                annotations += ["" for _ in range(len(data) - len(annotations))]
+                break
+
+        log.info(f"Labelling price: ${total_price:.2f}")
+        self.budget -= total_price
+
+        # Remove reasoning tokens from DeepSeek-R1
+        # Remove thinking tokens from DeepSeek-R1
+        if "deepseek-r1" in self.config.parameters.model:
+            for i, annotation in enumerate(annotations):
+                annotations[i] = DEEPSEEK_R1_END_REASONING_TOKEN.join(
+                    annotation.split(DEEPSEEK_R1_END_REASONING_TOKEN)[1:]
+                ).strip()
+
+        # Add the annotations as a new column in the dataset
+        if self.output_column_name in dataset.column_names:
+            dataset = dataset.remove_columns(self.output_column_name)
+
+        dataset = dataset.add_column(self.output_column_name, annotations)
+        return dataset
+
+    def _batched_call(self, dataset: Dataset) -> Dataset:
+
+        data = dataset[MESSAGES_COLUMN_NAME]
         base_request_kwargs = dict(self.config.parameters)
 
         Path(TMP_DIR).mkdir(exist_ok=True)
@@ -124,7 +196,7 @@ class OpenAILabeller(BaseLabeler):
                 text = json.loads(line)["response"]["body"]["choices"][0]["message"][
                     "content"
                 ].strip()
-                annotations(text)
+                annotations.append(text)
         # Calculate the price and write it to the file
         price = self._calculate_price(all_outputs)
         log.info(f"Labelling price: ${price:.2f}")
@@ -137,6 +209,14 @@ class OpenAILabeller(BaseLabeler):
             dataset = dataset.remove_columns(self.output_column_name)
         dataset = dataset.add_column(self.output_column_name, annotations)
         return dataset
+
+    def __call__(self, dataset: Dataset) -> Dataset:
+        if self.mode == "batched":
+            return self._batched_call(dataset)
+        elif self.mode == "sync":
+            return self._sync_call(dataset)
+        else:
+            raise ValueError(f"Invalid mode: {self.mode}")
 
     def _make_batched_request(self, input_file_id: str) -> list[str]:
         """

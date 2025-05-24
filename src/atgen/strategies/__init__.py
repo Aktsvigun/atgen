@@ -6,6 +6,7 @@ from .te_delfy import TeDelfyStrategy
 from .nsp import NSPStrategy
 from .bleuvar import BLEUVarStrategy
 from .idds import IDDSStrategy
+from .dual import DualStrategy
 
 
 STRATEGIES = {
@@ -17,4 +18,5 @@ STRATEGIES = {
     "nsp": NSPStrategy,
     "bleuvar": BLEUVarStrategy,
     "idds": IDDSStrategy,
+    "dual": DualStrategy,
 }

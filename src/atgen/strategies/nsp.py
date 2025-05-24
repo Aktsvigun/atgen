@@ -11,7 +11,12 @@ class NSPStrategy(Strategy):
         super().__init__()
 
     def __call__(
-        self, model: PreTrainedModel, unlabeled_pool: Dataset, num_to_label: int, *args, **kwargs
+        self,
+        model: PreTrainedModel,
+        unlabeled_pool: Dataset,
+        num_to_label: int,
+        *args,
+        **kwargs,
     ) -> list[int]:
         return nsp(model, unlabeled_pool, num_to_label)[0]
 
