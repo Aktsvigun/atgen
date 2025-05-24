@@ -1,0 +1,3 @@
+strategy: idds
+strategy_kwargs:
+  lambda_: 0.5

@@ -30,12 +30,13 @@ jobs:
         pip install -e .
         ./install.sh
         pip install flake8 pytest
-    # - name: Lint
-    #   uses: py-actions/flake8@v2
-    #   with:
-    #     args: "--extend-ignore E501,F405,F403,E203 --per-file-ignores __init__.py:F401"
-    #     path: "."
-    #     plugins: "flake8-black"
     - name: Test with pytest
       run: |
         pytest
+    # - name: Lint
+    #   uses: py-actions/flake8@v2
+    #   with:
+    #     # TODO remove src/atgen/strategies/idds.py,src/atgen/strategies/nsp.py,src/atgen/strategies/bleuvar.py from --extend-exclude when we fix it
+    #     args: "--extend-ignore E501,F405,F403,E203 --per-file-ignores __init__.py:F401 --extend-exclude src/atgen/metrics/AlignScore,src/atgen/metrics/summac,src/atgen/strategies/idds.py,src/atgen/strategies/nsp.py,src/atgen/strategies/bleuvar.py"
+    #     path: "src pages"
+    #     plugins: "flake8-black"

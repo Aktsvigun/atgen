@@ -5,7 +5,7 @@ from anthropic import Anthropic
 import logging
 
 from ..base_labeller import BaseLabeler
-
+from ...utils.constants import MESSAGES_COLUMN_NAME
 
 log = logging.getLogger()
 
@@ -21,10 +21,12 @@ class AnthropicLabeller(BaseLabeler):
         self.config = config
         # Create the Anthropic client
         self.client = Anthropic(api_key=self.config.api_key)
+        self.mode = config.get("mode")
 
     def __call__(self, dataset: Dataset) -> Dataset:
+        # TODO: add batched mode
 
-        data = dataset["input"]
+        data = dataset[MESSAGES_COLUMN_NAME]
         base_request_kwargs = dict(self.config.parameters)
 
         annotations = []

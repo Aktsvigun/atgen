@@ -1,50 +1,21 @@
 [build-system]
-requires = ["flit"]
-build-backend = "flit.buildapi"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "atgen"
 version = "0.0.0"
 authors = [
-  { name = "List of contributors: https://github.com/Aktsvigun/al-nlg/graphs/contributors", email = "artemshelmanov@gmail.com" },
+  { name = "List of contributors: https://github.com/Aktsvigun/atgen/graphs/contributors", email = "artemshelmanov@gmail.com" },
 ]
 description = "Toolkit for Active Learning in Generative Tasks"
 readme = "README.md"
-readme-content-type = "text/markdown"
 
 keywords = ["NLP", "deep learning", "transformer", "pytorch", "peft", "inference", "active learning"]
 license = {file = "LICENSE.md"}
 
 requires-python = ">=3.10"
-dependencies = [
-  "accelerate==0.28.0",
-  "anthropic==0.31.2",
-  "benepar==0.2.0",
-  "bert-score==0.3.13",
-  "bitsandbytes==0.42.0",
-  "ctc_score==0.1.3",
-  "datasets==2.18.0",
-  "evaluate==0.4.1",
-  "hydra-core==1.3.2",
-  "nltk==3.8.1",
-  "numpy==1.26.4",
-  "omegaconf==2.3.0",
-  "openai==1.37.1",
-  "peft==0.11.1",
-  "protobuf==3.20.3",
-  "pytest==8.3.2",
-  "pytorch_lightning==2.3.3",
-  "rake_nltk==1.0.6",
-  "rouge==1.0.1",
-  "rouge-score==0.1.2",
-  "sacrebleu==2.4.1",
-  "spacy==3.7.5",
-  "tabulate==0.9.0",
-  "transformers==4.42.4",
-  "torch==2.3.1",
-  "vllm==0.5.3.post1",
-  "xlrd==1.2.0",
-]
+dynamic = ["dependencies"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -66,6 +37,8 @@ classifiers = [
 "Bug Tracker" = "https://github.com/Aktsvigun/al-nlg/issues"
 "Repository" = "https://github.com/Aktsvigun/al-nlg"
 
-[scripts]
-run-active-learning = "scripts.run_active_learning:main"
-run-experiment-design = "scripts.run_experiment_design:main"
+[project.scripts]
+run-al = "atgen.run_scripts.run_active_learning:main"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

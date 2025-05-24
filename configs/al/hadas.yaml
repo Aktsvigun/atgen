@@ -1,0 +1,4 @@
+# HADAS strategy configuration
+strategy: hadas
+strategy_kwargs:
+  random_init: true

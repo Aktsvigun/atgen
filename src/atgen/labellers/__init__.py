@@ -1,3 +1,4 @@
+from .base_labeller import BaseLabeler
 from .golden_labeller import GoldenLabeler
 from .human_labeller import HumanLabeler
 from .custom_llm_labeller import CustomLLMLabeller

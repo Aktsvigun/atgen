@@ -18,6 +18,10 @@ outputs/
 *.ckpt
 da_model_*
 domain_adaptation_*
+external_metrics/
+*/trainer_output
+*/unsloth_compiled_cache
+notebooks/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

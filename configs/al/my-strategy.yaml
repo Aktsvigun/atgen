@@ -1,0 +1,3 @@
+strategy: my-strategy
+strategy_kwargs:
+  lambda_: 0.5

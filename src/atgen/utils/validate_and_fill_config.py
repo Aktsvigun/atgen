@@ -1,4 +1,8 @@
+import os
 from omegaconf import DictConfig, open_dict
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def validate_field(config, field):
@@ -6,7 +10,7 @@ def validate_field(config, field):
     try:
         for subfield in subfields:
             config = config[subfield]
-    except:
+    except Exception:
         raise Exception(f"{field} is not defined in config")
 
 
@@ -34,7 +38,17 @@ def validate_and_fill_config(config: DictConfig) -> DictConfig:
         validate_field(config, "data.dataset")
         validate_field(config, "data.input_column_name")
         validate_field(config, "data.output_column_name")
-        validate_field(config, "data.prompt")
+
+        validate_field(config, "data.system_prompt")
+        config.data.system_prompt = config.data.system_prompt.strip()
+        system_prompt_is_empty = (config.data.system_prompt == "") or (
+            config.data.system_prompt is None
+        )
+        # TODO: check whether we need this
+        # # Verify the system prompt is correctly formatted
+        # if "{text}" not in config.data.system_prompt and not system_prompt_is_empty:
+        #     config.data.system_prompt += "\n{text}"
+
         config.data.setdefault("train_subset_name", "train")
         config.data.setdefault("test_subset_name", "test")
         config.data.setdefault("train_subset_size", None)
@@ -82,4 +96,54 @@ def validate_and_fill_config(config: DictConfig) -> DictConfig:
         config.inference.setdefault("framework", "vllm")
         config.inference.setdefault("max_new_tokens", None)
 
+        # Evaluation
+        config = _validate_and_fill_eval_config(config)
+    return config
+
+
+def _validate_and_fill_eval_config(config: DictConfig) -> DictConfig:
+    provider = config.evaluation.provider.lower()
+    # Check if the API key is provided
+    if not (api_key := config.evaluation.api_key):
+        api_key = os.environ.get("EVALUATION_API_KEY")
+    if not api_key:
+        if provider == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY")
+        elif provider == "anthropic":
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+        elif provider == "openrouter":
+            api_key = os.environ.get("OPENROUTER_API_KEY")
+        else:
+            api_key = os.environ.get("API_KEY")
+        if not api_key:
+            api_key = config.labeller.get("api_key")
+            provider = config.labeller.get("provider")
+            if not api_key and any(
+                metric.startswith("deepeval")
+                for metric in config.evaluation.additional_metrics
+            ):
+                log.warning(
+                    "API key is required for DeepEval metrics. "
+                    "Set it as an environment variable `EVALUATION_API_KEY` or pass it as a parameter."
+                )
+
+    # Set default base URL if not provided
+    if (base_url := config.evaluation.base_url) is None:
+        if provider == "openai":
+            base_url = "https://api.openai.com/v1"
+        elif provider == "anthropic":
+            base_url = "https://api.anthropic.com/v1"
+        elif provider == "openrouter":
+            base_url = "https://openrouter.ai/api/v1"
+        elif provider == config.labeller.get("provider"):
+            base_url = config.labeller.get("base_url")
+        else:
+            log.error(
+                f"Base URL not provided for the provider {provider}. Deepeval metrics will not be calculated."
+            )
+            return config
+
+    config["evaluation"]["provider"] = provider
+    config["evaluation"]["api_key"] = api_key
+    config["evaluation"]["base_url"] = base_url
     return config

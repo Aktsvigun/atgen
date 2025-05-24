@@ -7,6 +7,8 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 
 from .validate_and_fill_config import validate_and_fill_config
+from .resolvers import register_resolvers
+
 
 os.environ["WANDB_DISABLED"] = "true"
 
@@ -15,6 +17,9 @@ log = logging.getLogger()
 
 def main_decorator(func):
     def run_script(config):
+        # Register custom resolvers before Hydra config is loaded
+        register_resolvers()
+
         config = validate_and_fill_config(config)
 
         # Set the working directory

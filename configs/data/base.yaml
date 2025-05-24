@@ -1,12 +1,15 @@
 dataset: SpeedOfMagic/gigaword_tiny
+few_shot_examples:
 fetch_kwargs: {}
 few_shot:
-  count: 1
-has_test: true
+  count: 0
+unlabeled_data_split_name: train
+test_split_name: test
 input_column_name: document
 input_max_length: 100
 output_column_name: summary
 output_max_length: 20
-prompt: 'Write a headline for the article in lowercase.\n\n{text}\n\nHeadline in lowercase:'
+system_prompt: "Write a headline for the article in lowercase."
 test_subset_size: 3
 train_subset_size: 100
+is_in_conversational_format: false

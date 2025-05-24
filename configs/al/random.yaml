@@ -1,0 +1,4 @@
+# Random strategy configuration
+strategy: random
+strategy_kwargs: 
+  random_init: true

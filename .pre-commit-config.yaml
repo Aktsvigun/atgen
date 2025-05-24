@@ -1,0 +1,37 @@
+default_language_version:
+  python: python3.12
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.4.1
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: "v1.10.0"
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports, --strict]
+        exclude: 'alembic/'
+        additional_dependencies:
+          [
+            types-aiofiles==23.2.0.0,
+            alembic==1.12.1,
+            pydantic==2.4.2,
+            pydantic-settings==2.0.3,
+            fastapi==0.104.1,
+            pytest==7.4.1,
+            redis==5.0.1,
+            uuid6==2024.1.12,
+            "types-aiobotocore[essential]==2.7.0",
+          ]

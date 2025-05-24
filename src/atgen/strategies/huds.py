@@ -1,5 +1,7 @@
 import numpy as np
 from math import ceil
+from omegaconf import DictConfig
+from typing import Optional
 from tqdm import tqdm
 
 from datasets import Dataset
@@ -13,6 +15,8 @@ from transformers import (
 
 from .base_strategy import Strategy
 from ..utils.get_embeddings import get_embeddings
+from ..utils.constants import MESSAGES_COLUMN_NAME
+from ..utils.data.prepare_conversational_data import prepare_conversational_data
 
 
 class HudsStrategy(Strategy):
@@ -26,6 +30,7 @@ class HudsStrategy(Strategy):
         model_max_length: int = 1024,
         torch_dtype: str = "float16",
         cache_dir: str = None,
+        data_config: DictConfig = None,
     ):
         super().__init__(subsample_size)
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -40,6 +45,7 @@ class HudsStrategy(Strategy):
             device=device,
         )
         self.random_init = False
+        self.data_config = data_config
 
     def __call__(
         self,
@@ -49,13 +55,19 @@ class HudsStrategy(Strategy):
         num_to_label: int,
         batch_size: int = 4,
         max_new_tokens: int = 20,
+        few_shot_examples: Optional[Dataset] = None,
         *args,
         **kwargs,
     ) -> list[int]:
-        import pdb
-
-        pdb.set_trace()
         unlabeled_pool = self._select_subsample_if_necessary(unlabeled_pool)
+        if not MESSAGES_COLUMN_NAME in unlabeled_pool.column_names:
+            unlabeled_pool = prepare_conversational_data(
+                dataset=unlabeled_pool,
+                data_config=self.data_config,
+                split="test",
+                few_shot_examples=few_shot_examples,
+                model_name=model.name_or_path,
+            )
         return huds(
             model=model,
             tokenizer=tokenizer,
@@ -86,7 +98,7 @@ def huds(
     nnlls = normalized_negative_log_likelihoods(
         model,
         tokenizer,
-        unlabeled_pool["input"],
+        unlabeled_pool[MESSAGES_COLUMN_NAME],
         batch_size=batch_size,
         max_new_tokens=max_new_tokens,
         **generation_kwargs,
@@ -118,12 +130,21 @@ def normalized_negative_log_likelihoods(
         batch_texts = unlabeled_pool_inputs[
             idx_beginning_batch * batch_size : (idx_beginning_batch + 1) * batch_size
         ]
-        inputs = tokenizer(
-            batch_texts,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        )
+        inputs = {
+            "input_ids": tokenizer.apply_chat_template(
+                batch_texts,
+                batched=True,
+                add_generation_prompt=True,
+                padding="longest",
+                truncation=True,
+                return_tensors="pt",
+            ),
+        }
+        # Add attention mask if it doesn't exist (1 for tokens, 0 for padding)
+        inputs["attention_mask"] = (
+            inputs["input_ids"] != tokenizer.pad_token_id
+        ).long()
+
         batch_outputs = model.generate(
             **{k: v.to(model.device) for k, v in inputs.items()},
             max_new_tokens=max_new_tokens,

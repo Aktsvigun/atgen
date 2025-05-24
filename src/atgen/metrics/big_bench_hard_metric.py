@@ -1,6 +1,6 @@
-from os import listdir
-
-from datasets import load_dataset
+from deepeval.benchmarks import BigBenchHard
+from deepeval.benchmarks.big_bench_hard.template import BigBenchHardTemplate
+from deepeval.models.base_model import DeepEvalBaseLLM
 from transformers import (
     GenerationMixin,
     PreTrainedTokenizerBase,
@@ -9,9 +9,95 @@ from transformers import (
 """
 https://arxiv.org/abs/2210.09261v1
 
-Prompt options (answer only or chain-of-thought) can be found in
-../../prompts/big-bench-hard
+For benchmark_params, refer to https://docs.confident-ai.com/docs/benchmarks-big-bench-hard
 """
+
+
+class BigBenchHardModel(DeepEvalBaseLLM):
+    def __init__(
+        self,
+        model: GenerationMixin,
+        tokenizer: PreTrainedTokenizerBase,
+        device: str,
+        model_name: str = "Model",
+        **generation_kwargs,
+    ) -> None:
+        self.model = model
+        self.tokenizer = tokenizer
+        self.device = device
+        self.model_name = model_name
+        self.generation_kwargs = generation_kwargs
+
+    def load_model(self) -> GenerationMixin:
+        return self.model
+
+    def generate(self, prompt: str, **kwargs) -> str:
+        model = self.load_model()
+        model.to(self.device)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.device)
+        generated_ids = model.generate(**model_inputs, **self.generation_kwargs)
+        return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+    async def a_generate(self, prompt: str, **kwargs) -> str:
+        return self.generate(prompt)
+
+    def batch_generate(self, prompts: list[str], **kwargs) -> list[str]:
+        model = self.load_model()
+        model.to(self.device)
+        model_inputs = self.tokenizer(prompts, return_tensors="pt").to(self.device)
+        generated_ids = model.generate(**model_inputs, **self.generation_kwargs)
+        return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+    def get_model_name(self):
+        return self.model_name
+
+
+"""
+The main branch for deepeval seems to contain broken code, as "NumberModel" is not defined:
+https://github.com/confident-ai/deepeval/blob/main/deepeval/benchmarks/big_bench_hard/big_bench_hard.py#L153
+
+This child class fixes batch prediction.
+"""
+
+
+class BigBenchHardFixed(BigBenchHard):
+    def batch_predict(self, model, task, goldens):
+        prompts = []
+        for golden in goldens:
+            prompt: dict = BigBenchHardTemplate.generate_output(
+                input=golden.input,
+                task=task,
+                n_shots=self.n_shots,
+                enable_cot=self.enable_cot,
+            )
+            prompts.append(prompt)
+
+        # Enforced model generation
+        prompts = [
+            prompt + "Make sure to output only the numerical answer."
+            for prompt in prompts
+        ]
+        predictions = model.batch_generate(prompts)
+        predictions = [str(pred) for pred in predictions]
+
+        if len(predictions) is not len(goldens):
+            raise ValueError(
+                "Custom `batch_generate` method did not return the same "
+                "number of generations as the number of prompts."
+            )
+
+        res = []
+        for i in range(len(predictions)):
+            prediction = predictions[i]
+            prediction = prediction.split()[-1]
+            prediction = prediction[:-1] if self.enable_cot else prediction
+            golden = goldens[i]
+
+            # Define Metric
+            score = self.scorer.exact_match_score(golden.expected_output, prediction)
+            res.append({"prediction": prediction, "score": score})
+
+        return res
 
 
 class BigBenchHardMetric:
@@ -19,70 +105,16 @@ class BigBenchHardMetric:
         self,
         model: GenerationMixin,
         tokenizer: PreTrainedTokenizerBase,
-        prompts_path: str = "../../prompts/big-bench-hard/answer-only",
-        cache_dir: str = "./cache",
-        **generation_kwargs,
+        device: str = "cuda",
+        model_name: str = "Model",
+        generation_params: dict = {},
+        benchmark_params: dict = {},
     ) -> None:
-        self.model = model
-        self.tokenizer = tokenizer
-        self.generation_kwargs = generation_kwargs
-        self.cache_dir = cache_dir
-
-        self.prompts = {}
-        for filename in listdir(prompts_path):
-            if not filename.endswith(".txt"):
-                continue
-
-            with open(f"{prompts_path}/{filename}") as file:
-                content = file.read()
-                SEP = "-----\n"
-                if SEP in content:
-                    content = content.split(SEP)[-1]
-
-                self.prompts[filename.split(".")[0]] = content
-
-    def task_score(self, task_name: str) -> float:
-        tasks = load_dataset(
-            "maveriq/bigbenchhard",
-            task_name,
-            cache_dir=self.cache_dir,
-        )["train"][:]
-
-        prompt_template = self.prompts[task_name]
-        prompts = [
-            prompt_template.format(text=task_input) for task_input in tasks["input"]
-        ]
-        targets = [task_target.lower().strip() for task_target in tasks["target"]]
-
-        inputs = self.tokenizer(
-            prompts,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
+        self.model = BigBenchHardModel(
+            model, tokenizer, device, model_name, **generation_params
         )
-        outputs = self.model.generate(
-            **inputs,
-            **self.generation_kwargs,
-        )
-        generated = self.tokenizer.batch_decode(
-            outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True
-        )
+        self.benchmark = BigBenchHardFixed(**benchmark_params)
 
-        n_correct = 0
-        for text, target in zip(generated, targets):
-            if text.endswith("."):
-                text = text[:-1]
-            if task_name in ["dyck_languages", "word_sorting"]:  # multiple word answers
-                text = (
-                    text.split("A:")[-1].lower().split("so the answer is")[-1].strip()
-                )
-            else:
-                text = text.split()[-1].strip().lower()
-
-            n_correct += int(text == target)
-
-        return n_correct / len(targets)
-
-    def score(self) -> float:
-        scores = [self.task_score(task_name) for task_name in self.prompts]
-        return sum(scores) / len(scores)
+    def score(self, batch_size: int | None = None) -> float:
+        self.benchmark.evaluate(model=self.model, batch_size=batch_size)
+        return self.benchmark.overall_score

@@ -3,14 +3,11 @@ input_column_name: 'document'
 output_column_name: 'summary'
 train_subset_size: 10000
 test_subset_size: 1000
-has_test: true
+unlabeled_data_split_name: train
+test_split_name: test
 input_max_length: 1024
 output_max_length: 42
-fetch_kwargs: {}
-prompt: |
-    Summarize the article in one sentence.
-
-    Article:
-    {text}
-    
-    Summary:
+fetch_kwargs:
+  trust_remote_code: true
+is_in_conversational_format: false
+system_prompt: "Summarize the article in one sentence."

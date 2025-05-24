@@ -1,0 +1,3 @@
+strategy: fac-loc
+strategy_kwargs:
+  lambda_: 0.5

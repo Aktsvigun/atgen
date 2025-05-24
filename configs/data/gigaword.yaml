@@ -3,14 +3,9 @@ input_column_name: 'document'
 output_column_name: 'summary'
 train_subset_size: 10000
 test_subset_size: 100
-has_test: true
+unlabeled_data_split_name: train
+test_split_name: test
 input_max_length: 89
 output_max_length: 21
 fetch_kwargs: {}
-prompt: |
-    Generate a headline for the article in lowercase.
-
-    Article:
-    {text}
-
-    Headline (in lowercase):
+system_prompt: "Generate a headline for the article in lowercase."

@@ -1,13 +1,15 @@
 from math import ceil
 import os
+import sys
+from openai import OpenAI, AsyncOpenAI
 from typing import List, Dict
 from urllib.request import urlretrieve
-
+import logging
+from pathlib import Path
 import nltk
 import numpy as np
 import torch
 import torch.nn.functional as F
-from alignscore import AlignScore
 from datasets import Dataset
 from nltk import ngrams
 from nltk.stem import porter
@@ -22,8 +24,47 @@ from transformers import (
     DataCollatorWithPadding,
 )
 
-from .bart_score import BARTScorer
-from .summac.summac.model_summac import SummaCZS
+log = logging.getLogger(__name__)
+
+try:
+    from .bart_score import BARTScorer
+
+    is_bart_score_available = True
+except ImportError:
+    log.warning(
+        "BARTScorer not found, please install it (see `install.sh`). Skipping the BARTScore metric."
+    )
+    is_bart_score_available = False
+
+try:
+    from alignscore import AlignScore
+
+    is_alignscore_available = True
+except ImportError:
+    log.warning(
+        "AlignScore not found, please install it (see `install.sh`). Skipping the AlignScore metric."
+    )
+    is_alignscore_available = False
+
+from deepeval import evaluate
+from deepeval.models.base_model import DeepEvalBaseLLM
+from deepeval.test_case import LLMTestCase
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    FaithfulnessMetric,
+    SummarizationMetric,
+    PromptAlignmentMetric,
+)
+
+
+ALIGNSCORE_CHECKPOINT_PATH = os.getenv(
+    "ALIGNSCORE_CHECKPOINT_PATH",
+    # Going up 3 levels from metrics.py: src/atgen/metrics -> repository root
+    os.path.join(
+        Path(__file__).parents[3],
+        "external_metrics/AlignScore/model/AlignScore-base.ckpt",
+    ),
+)
 
 
 def decode(eval_preds, tokenizer):
@@ -77,22 +118,14 @@ def pair_bleu(references, prediction):
     there are no common higher order n-grams between the
     texts.
     """
-    tok_ref = [word_tokenize(sent) for sent in sent_tokenize(references)]
-    tok_pred = [word_tokenize(sent) for sent in sent_tokenize(prediction)]
-    score = 0
-    for c_cent in tok_pred:
-        try:
-            score += corpus_bleu(
-                [tok_ref], [c_cent], smoothing_function=smoothing_function
-            )
-        except KeyError:
-            score = 0.0
+    if not isinstance(references, list):
+        references = [references]
+    tok_ref = [word_tokenize(ref) for ref in references]
+    tok_pred = word_tokenize(prediction)
     try:
-        score /= len(tok_pred)
-    except ZeroDivisionError:
-        score = 0.0
-
-    return score
+        return corpus_bleu(tok_ref, [tok_pred], smoothing_function=smoothing_function)
+    except (KeyError, ZeroDivisionError):
+        return 0.0
 
 
 def calculate_bart_score(
@@ -104,6 +137,8 @@ def calculate_bart_score(
     aggregate=True,
     cache_dir: str = "cache",
 ):
+    if not is_bart_score_available:
+        return None
     if scorer is None:
         scorer = BARTScorer(cache_dir=cache_dir)
     scores = {}
@@ -113,9 +148,18 @@ def calculate_bart_score(
         )
     if refs is not None:
         # scores["BARTScore-rh"] = np.array(scorer.score(refs, preds, batch_size=batch_size))
-        scores["BARTScore-hr"] = np.array(
-            scorer.score(preds, refs, batch_size=batch_size)
-        )
+        if isinstance(refs[0], list):
+            scores_hr = []
+            for ref, pred in zip(refs, preds):
+                inst_pred = [pred for _ in range(len(ref))]
+                # Take a maximum within the observation similar to ROUGE
+                inst_score_hr = max(scorer.score(inst_pred, ref, batch_size=batch_size))
+                scores_hr.append(inst_score_hr)
+            scores["BARTScore-hr"] = np.array(scores_hr)
+        else:
+            scores["BARTScore-hr"] = np.array(
+                scorer.score(preds, refs, batch_size=batch_size)
+            )
         # scores["BARTScore-fa"] = (scores["BARTScore-rh"] + scores["BARTScore-hr"]) / 2
 
     if aggregate:
@@ -200,6 +244,8 @@ def calculate_cola_model_predictions(
 
 
 def calculate_infolm_score(predictions, references, batch_size=4):
+    from torchmetrics.text.infolm import InfoLM
+
     assert len(predictions) == len(references), "Lengths must coincide!"
     infolm_fr = InfoLM(measure_to_use="fisher_rao")
     infolm_ab = InfoLM(measure_to_use="ab", alpha=1.0, beta=1.0)
@@ -371,26 +417,315 @@ def calculate_alignscore(
     device: str = "cuda",
     cache_dir: str = "cache",
 ):
-    if not os.path.exists("AlignScore-base.ckpt"):
-        urlretrieve("https://huggingface.co/yzha/AlignScore/resolve/main/AlignScore-base.ckpt", "AlignScore-base.ckpt")
+    if not is_alignscore_available:
+        return None
+    if isinstance(references[0], list):
+        log.error("AlignScore does not support multiple references. Skipping...")
+        return None
+    if not os.path.exists(ALIGNSCORE_CHECKPOINT_PATH):
+        urlretrieve(
+            "https://huggingface.co/yzha/AlignScore/resolve/main/AlignScore-base.ckpt",
+            ALIGNSCORE_CHECKPOINT_PATH,
+        )
 
     scorer = AlignScore(
         model="roberta-base",
         batch_size=batch_size,
         device=device,
-        ckpt_path="src/atgen/metrics/AlignScore/AlignScore-base.ckpt",
+        ckpt_path=ALIGNSCORE_CHECKPOINT_PATH,
         evaluation_mode="nli_sp",
-        cache_dir=cache_dir,
     )
+    # Fix: alignscore outputs an error if a text is empty, so we need to add some content to such texts
+    original_texts = [text if text else " " for text in original_texts]
+    predictions = [text if text else " " for text in predictions]
+    references = [text if text else " " for text in references]
+
     scores_ref = scorer.score(contexts=original_texts, claims=predictions)
     scores_baseline = scorer.score(contexts=original_texts, claims=references)
     scores_rel = np.array(scores_ref) / np.array(scores_baseline)
     return {"alignscore": scores_ref, "alignscore_rel": scores_rel}
 
 
-def calculate_gpt4o_score(
+class EvaluationLLM(DeepEvalBaseLLM):
+    """
+    Custom Evaluation LLM implementation for DeepEval.
+
+    This class implements the DeepEvalBaseLLM interface to allow using
+    custom models with DeepEval metrics.
+    """
+
+    def __init__(
+        self,
+        api_key=None,
+        model="openai/gpt-4o-2024-11-20",
+        base_url="https://openrouter.ai/api/v1",
+    ):
+        """
+        Initialize the Evaluation LLM.
+
+        Args:
+            api_key: Evaluation API key
+            model: Model identifier (e.g., "openai/gpt-4o-2024-11-20")
+            base_url: Evaluation API base URL
+        """
+        self.api_key = api_key
+
+        self.model_name = model
+        self.base_url = base_url
+        self.client = None
+        self.async_client = None
+        self.OpenAI = OpenAI
+        self.AsyncOpenAI = AsyncOpenAI
+
+    def load_model(self):
+        """Load and return the client."""
+        if self.client is None:
+            self.client = self.OpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key,
+            )
+        return self.client
+
+    def load_async_model(self):
+        """Load and return the async client."""
+        if self.async_client is None:
+            self.async_client = self.AsyncOpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key,
+            )
+        return self.async_client
+
+    def generate(self, prompt: str) -> str:
+        """
+        Generate a response from the evaluation model.
+
+        Args:
+            prompt: The prompt to send to the model
+
+        Returns:
+            The model's response as a string
+        """
+        client = self.load_model()
+        response = client.chat.completions.create(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content
+
+    async def a_generate(self, prompt: str) -> str:
+        """
+        Asynchronously generate a response from the evaluation model.
+
+        Args:
+            prompt: The prompt to send to the model
+
+        Returns:
+            The model's response as a string
+        """
+        # Use the async client for async operations
+        client = self.load_async_model()
+        response = await client.chat.completions.create(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content
+
+    def get_model_name(self):
+        """Return the name of the model."""
+        return f"EvaluationLLM: {self.model_name}"
+
+
+def calculate_deepeval_metrics(
     predictions,
     references,
     original_texts,
+    metrics_to_calculate=None,
+    base_url: str = "https://openrouter.ai/api/v1",
+    api_key: str = None,
+    model="openai/gpt-4o-2024-11-20",
+    threshold=0.5,
+    include_reason=False,
+    strict_mode=False,
+    async_mode=True,
+    verbose_mode=False,
+    truths_extraction_limit=None,
 ):
-    return gpt4o_evaluate_script.calculate_metrics({"summaries": predictions, "golden_output": references, "source_texts": original_texts})
+    """
+    Calculate DeepEval metrics using EvaluationLLM.
+
+    Args:
+        predictions: List of generated texts
+        references: List of reference texts
+        original_texts: List of source texts
+        metrics_to_calculate: List of metrics to calculate. Options:
+            ["deepeval_answer_relevance", "deepeval_faithfulness", "deepeval_summarization", "deepeval_prompt_alignment"]
+        api_key: Evaluation API key
+        base_url: Evaluation API base URL
+        model: Evaluation model to use
+        threshold: Threshold for metrics (default: 0.5)
+        include_reason: Include reason for evaluation score (default: False)
+        strict_mode: Enforce binary metric score (1 for perfection, 0 otherwise) (default: False)
+        async_mode: Enable concurrent execution (default: True)
+        verbose_mode: Print intermediate steps (default: False)
+        truths_extraction_limit: Maximum number of factual truths to extract (default: None)
+
+    Returns:
+        Dictionary with metric scores
+    """
+
+    if not metrics_to_calculate:
+        metrics_to_calculate = [
+            "deepeval_answer_relevance",
+            "deepeval_faithfulness",
+            "deepeval_summarization",
+            "deepeval_prompt_alignment",
+        ]
+
+    # Create EvaluationLLM instance
+    llm = EvaluationLLM(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+    )
+
+    results = {}
+
+    # Create metrics based on selected options
+    metrics = []
+    metric_name_mapping = {}  # Maps metric class name to the deepeval metric name
+
+    # Dictionary to store test cases for each metric
+    metric_test_cases = {}
+
+    if "deepeval_answer_relevance" in metrics_to_calculate:
+        metric = AnswerRelevancyMetric(
+            threshold=threshold,
+            model=llm,
+            include_reason=include_reason,
+            strict_mode=strict_mode,
+            async_mode=async_mode,
+        )
+        metrics.append(metric)
+        metric_name_mapping[metric.__class__.__name__] = "deepeval_answer_relevance"
+
+        # Create specific test cases for AnswerRelevancy metric
+        answer_relevance_test_cases = []
+        for i, (pred, src) in enumerate(zip(predictions, original_texts)):
+            test_case = LLMTestCase(
+                input=src,
+                actual_output=pred,
+            )
+            answer_relevance_test_cases.append(test_case)
+        metric_test_cases[metric.__class__.__name__] = answer_relevance_test_cases
+
+    if "deepeval_faithfulness" in metrics_to_calculate:
+        metric = FaithfulnessMetric(
+            threshold=threshold,
+            model=llm,
+            include_reason=include_reason,
+            strict_mode=strict_mode,
+            async_mode=async_mode,
+            truths_extraction_limit=truths_extraction_limit,
+        )
+        metrics.append(metric)
+        metric_name_mapping[metric.__class__.__name__] = "deepeval_faithfulness"
+
+        # Create specific test cases for Faithfulness metric
+        faithfulness_test_cases = []
+        for i, (pred, src) in enumerate(zip(predictions, original_texts)):
+            test_case = LLMTestCase(
+                input=src,
+                actual_output=pred,
+                retrieval_context=[src],
+            )
+            faithfulness_test_cases.append(test_case)
+        metric_test_cases[metric.__class__.__name__] = faithfulness_test_cases
+
+    if "deepeval_summarization" in metrics_to_calculate:
+        metric = SummarizationMetric(
+            threshold=threshold,
+            model=llm,
+            include_reason=include_reason,
+            strict_mode=strict_mode,
+            async_mode=async_mode,
+        )
+        metrics.append(metric)
+        metric_name_mapping[metric.__class__.__name__] = "deepeval_summarization"
+
+        # Create specific test cases for Summarization metric
+        summarization_test_cases = []
+        for i, (pred, src) in enumerate(zip(predictions, original_texts)):
+            test_case = LLMTestCase(
+                input=src,
+                actual_output=pred,
+            )
+            summarization_test_cases.append(test_case)
+        metric_test_cases[metric.__class__.__name__] = summarization_test_cases
+
+    if "deepeval_prompt_alignment" in metrics_to_calculate:
+        metric = PromptAlignmentMetric(
+            threshold=threshold,
+            model=llm,
+            prompt_instructions=["Do what you are told to do in the prompt"],
+            include_reason=include_reason,
+            strict_mode=strict_mode,
+            async_mode=async_mode,
+        )
+        metrics.append(metric)
+        metric_name_mapping[metric.__class__.__name__] = "deepeval_prompt_alignment"
+
+        # Create specific test cases for PromptAlignment metric
+        prompt_alignment_test_cases = []
+        for i, (pred, ref, src) in enumerate(
+            zip(predictions, references, original_texts)
+        ):
+            test_case = LLMTestCase(
+                input=src,
+                actual_output=pred,
+                expected_output=ref,
+            )
+            prompt_alignment_test_cases.append(test_case)
+        metric_test_cases[metric.__class__.__name__] = prompt_alignment_test_cases
+
+    # Run evaluation for each metric separately
+    for metric in metrics:
+        metric_class_name = metric.__class__.__name__
+        test_cases = metric_test_cases.get(metric_class_name, [])
+
+        if test_cases:
+            # Disable printing to console during evaluation if not verbose
+            original_stdout = sys.stdout
+            if not verbose_mode:
+                sys.stdout = open(os.devnull, "w")
+
+            try:
+                # Run evaluation for this specific metric
+                evaluation_results = evaluate(
+                    test_cases=test_cases,
+                    metrics=[metric],
+                    run_async=async_mode,
+                )
+
+                deepeval_metric_name = metric_name_mapping.get(metric_class_name)
+                scores = []
+                reasons = []
+
+                # Process results for this metric
+                for result in evaluation_results.test_results:
+                    scores.append(1 if result.success else 0)
+
+                # Calculate average score
+                if scores:
+                    results[deepeval_metric_name] = np.mean(scores)
+
+            finally:
+                # Restore stdout
+                if not verbose_mode:
+                    sys.stdout.close()
+                    sys.stdout = original_stdout
+    print("================================================")
+    print("Results:")
+    print(results)
+    print("================================================")
+
+    return results
