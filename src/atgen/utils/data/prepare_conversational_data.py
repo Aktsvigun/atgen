@@ -28,7 +28,9 @@ def prepare_conversational_data(
                     ]
                     for (fs_input, fs_output) in zip(
                         few_shot_examples[input_column_name],
-                        few_shot_examples[output_column_name],
+                        few_shot_examples[output_column_name]
+                        if isinstance(output_column_name, str)
+                        else few_shot_examples[output_column_name][0],
                     )
                 ]
             )
@@ -42,8 +44,8 @@ def prepare_conversational_data(
         is_in_conversational_format=data_config.is_in_conversational_format,
         input_column_name=input_column_name,
         output_column_name=output_column_name,
+        assistant_response_start=data_config.assistant_response_start,
     )
-
     dataset = dataset.map(
         preprocess_fn,
         batched=False,
