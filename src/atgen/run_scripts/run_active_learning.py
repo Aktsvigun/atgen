@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Union
 import logging
 from atgen.utils.main_decorator import main_decorator
-from atgen.utils.constants import DEFAULT_CONFIG_NAME
+from atgen.utils.constants import DEFAULT_CONFIG_NAME, UNLABELED_DATA_SPLIT_DEFAULT_NAME, TEST_DATA_SPLIT_DEFAULT_NAME
 
 log = logging.getLogger()
 
@@ -89,14 +89,14 @@ Prompt:\n{config.data.system_prompt}
     log.info("Loading data.")
     unlabeled_data = load_data(
         data_config=config.data,
-        split=config.data.unlabeled_data_split_name,
+        split=UNLABELED_DATA_SPLIT_DEFAULT_NAME,
         cache_dir=config.cache_dir,
         seed=seed,
     )
     if has_test:
         test_data = load_data(
             data_config=config.data,
-            split=config.data.test_split_name,
+            split=TEST_DATA_SPLIT_DEFAULT_NAME,
             cache_dir=config.cache_dir,
             seed=seed,
         )

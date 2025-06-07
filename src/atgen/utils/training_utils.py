@@ -16,9 +16,9 @@ from transformers import (
 )
 from trl import SFTTrainer, SFTConfig, DataCollatorForCompletionOnlyLM
 from trl.data_utils import (
-    is_conversational, 
-    maybe_apply_chat_template, 
-    maybe_convert_to_chatml
+    is_conversational,
+    maybe_apply_chat_template,
+    maybe_convert_to_chatml,
 )
 from trl.trainer.utils import ConstantLengthDataset
 from accelerate import PartialState
@@ -87,7 +87,7 @@ class DataCollatorForLastCompletionOnlyLM(DataCollatorForCompletionOnlyLM):
     Data collator that extends DataCollatorForCompletionOnlyLM to only train on the last assistant message.
     It ensures that only the final assistant response will contribute to the loss, while all previous messages
     (including earlier assistant responses) are masked with the ignore_index.
-    
+
     """
 
     def torch_call(self, examples):
@@ -241,8 +241,12 @@ def _get_train_eval_datasets(
             batched=True,
             fn_kwargs={"tokenizer": tokenizer, "data_collator": data_collator},
         ).filter(lambda x: x[TEXT_FIELD] != "")
-    logger.warning(f"Truncated {orig_train_data_len - len(train_data)} examples from train set.")
-    logger.warning(f"Truncated {orig_eval_data_len - len(eval_data)} examples from eval set.")
+    logger.warning(
+        f"Truncated {orig_train_data_len - len(train_data)} examples from train set."
+    )
+    logger.warning(
+        f"Truncated {orig_eval_data_len - len(eval_data)} examples from eval set."
+    )
     return train_data, eval_data
 
 
@@ -268,6 +272,7 @@ def _formatting_fn(examples, tokenizer: PreTrainedTokenizerFast):
         tokenize=False,
         add_generation_prompt=False,
     )
+
 
 def get_trainer(
     config: DictConfig,
@@ -298,7 +303,7 @@ def get_trainer(
         tokenizer=tokenizer,
         data_collator=data_collator,
     )
-    
+
     return SFTTrainer(
         model=model,
         processing_class=tokenizer,
@@ -309,4 +314,3 @@ def get_trainer(
         callbacks=callbacks,
         formatting_func=partial(_formatting_fn, tokenizer=tokenizer),
     )
-
