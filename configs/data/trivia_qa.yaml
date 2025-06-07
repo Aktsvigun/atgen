@@ -1,0 +1,13 @@
+dataset: ['mandarjoshi/trivia_qa', 'rc.wikipedia']
+input_column_name: 'question'
+output_column_name: ['answer', 'value']
+unlabeled_data_split_name: train
+test_split_name: validation
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 1024
+output_max_length: 20
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: "Please answer the question:\n\n"
+assistant_response_start: ${model.assistant_response_start}

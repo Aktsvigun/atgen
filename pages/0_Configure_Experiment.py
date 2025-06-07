@@ -429,13 +429,13 @@ def main():
             col1, col2, col3 = st.columns(3)
             with col1:
                 if st.button("📊 View Metrics", use_container_width=True):
-                    st.switch_page("./pages/1_Metrics.py")
+                    st.switch_page("1_Metrics")
             with col2:
                 if st.button("🏷️ View Labeled Examples", use_container_width=True):
-                    st.switch_page("./pages/2_Labeled_examples.py")
+                    st.switch_page("2_Labeled_examples")
             with col3:
                 if st.button("👩‍🎨 Annotate Examples", use_container_width=True):
-                    st.switch_page("./pages/3_Annotation.py")
+                    st.switch_page("3_Annotation")
             st.stop()
             
     st.markdown(
@@ -573,10 +573,10 @@ def main():
         labeller = st.radio(
             "👨‍💼 Labeller",
             [
+                "Golden (only for benchmarking)",
                 "Open-source / Custom LLM",
                 "API LLM",
                 "Human",
-                "Golden (only for benchmarking)",
             ],
             help="Select the type of labeller to use for data annotation",
         )
@@ -592,12 +592,29 @@ def main():
                 help="Cost paid to human annotators per example",
             )
         elif labeller == "custom_llm":
-            model_checkpoint = st.text_input(
+            labeller_checkpoint = st.text_input(
                 "🤖 Model checkpoint from HuggingFace",
-                value="Qwen/QwQ-32B",
+                value="Qwen/Qwen3-32B",
                 help="HuggingFace model ID for the custom LLM",
             )
         elif labeller == "api_llm":
+            # Add data privacy disclaimer
+            st.markdown(
+                """
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                    <h4 style="color: #856404; margin-top: 0; display: flex; align-items: center;">
+                        ⚠️ Data Privacy Notice
+                    </h4>
+                    <p style="color: #856404; margin-bottom: 0; font-size: 0.9rem;">
+                        <strong>Important:</strong> When using API-based labellers (OpenAI, Anthropic, etc.), your dataset will be sent to external services for processing. 
+                        Please ensure you have the necessary permissions and that your data complies with the respective service providers' terms of use and privacy policies.
+                        Consider using local/custom models if your data contains sensitive or proprietary information.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            
             col1, col2 = st.columns(2)
             with col1:
                 provider = st.radio(
@@ -664,7 +681,7 @@ def main():
             # Dataset input
             dataset = st.text_input(
                 "📚 Dataset or path to data",
-                value="SpeedOfMagic/gigaword_tiny",
+                value="Yale-LILY/aeslc",
                 help="HuggingFace dataset ID or local path to dataset",
             )
 
@@ -788,13 +805,13 @@ def main():
         with col1:
             input_field = st.text_input(
                 "📥 Input field name",
-                value="document",
+                value="email_body",
                 help="Name of the field containing input text in the dataset",
             )
         with col2:
             reference_field = st.text_input(
                 "📤 Reference field name",
-                value="summary",
+                value="subject_line",
                 help="Name of the field containing reference output in the dataset",
             )
 
@@ -822,7 +839,7 @@ def main():
         with col1:
             model_checkpoint = st.text_input(
                 "🤖 Model checkpoint",
-                value="Qwen/Qwen2.5-1.5B-Instruct",
+                value="Qwen/Qwen3-1.7B",
                 help="HuggingFace model ID for generation",
             )
 
@@ -1266,7 +1283,7 @@ def main():
                             ] = price_input_per_example
                     elif labeller == "custom_llm":
                         if "model_checkpoint" in locals():
-                            config["labeller"]["model"]["checkpoint"] = model_checkpoint
+                            config["labeller"]["model"]["checkpoint"] = labeller_checkpoint
                     elif labeller == "api_llm":
                         config["labeller"]["api_key"] = api_key
                         config["labeller"]["provider"] = provider
@@ -1401,24 +1418,24 @@ def main():
                         nav_col1, nav_col2, nav_col3 = st.columns(3)
                         with nav_col1:
                             if st.button("📊 View Metrics", use_container_width=True):
-                                st.switch_page("1_Metrics.py")
+                                st.switch_page("1_Metrics")
                         with nav_col2:
                             if st.button(
                                 "🏷️ View Labeled Examples", use_container_width=True
                             ):
-                                st.switch_page("2_Labeled_examples.py")
+                                st.switch_page("2_Labeled_examples")
                         with nav_col3:
                             if st.button(
                                 "👩‍🎨 Annotate Examples", use_container_width=True
                             ):
-                                st.switch_page("3_Annotation.py")
+                                st.switch_page("3_Annotation")
             except Exception as e:
                 # Update status to failed
                 update_experiment_status(STATUS_FAILED)
-                st.error(f"An error occurred: {str(e)}")
-                import traceback
-
-                st.code(traceback.format_exc(), language="python")
+                # st.error(f"An error occurred: {str(e)}")
+                # import sys, pdb
+                # exc_type, exc_value, exc_traceback = sys.exc_info()
+                # pdb.post_mortem(exc_traceback)
         elif is_valid_required_performance:
             st.error("❌ You didn't fill one of the required arguments.")
 
