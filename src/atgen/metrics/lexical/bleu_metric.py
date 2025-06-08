@@ -7,7 +7,6 @@ import logging
 
 from ..base.base_metric import BaseMetric, MetricConfig
 
-# Ensure nltk data is downloaded
 try:
     word_tokenize("test")
 except LookupError:
@@ -38,7 +37,6 @@ def smoothing_function(p_n, references, hypothesis, hyp_len):
 
 
 class BleuMetric(BaseMetric):
-    """BLEU (Bilingual Evaluation Understudy) metric implementation."""
     
     @property
     def category(self) -> str:

@@ -12,7 +12,6 @@ import nltk
 
 from ..base.base_metric import BaseMetric, MetricConfig
 
-# Ensure NLTK data is downloaded
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:

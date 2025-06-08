@@ -8,7 +8,6 @@ from ..base.base_metric import BaseMetric, MetricConfig
 
 
 class SentBertMetric(BaseMetric):
-    """SentenceBERT semantic similarity metric."""
     
     def __init__(self, config: Optional[MetricConfig] = None):
         super().__init__(config)
@@ -18,7 +17,6 @@ class SentBertMetric(BaseMetric):
     
     
     def _initialize_model(self):
-        """Initialize the SentenceBERT model if not already initialized."""
         if self.model is None:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.checkpoint, 
@@ -58,7 +56,6 @@ class SentBertMetric(BaseMetric):
             end += half_batch_size
             batch_idx = slice(start, end)
             
-            # Tokenize sentences
             encoded_input = self.tokenizer(
                 source_texts[batch_idx] + ref_texts[batch_idx],
                 padding=True,
@@ -69,14 +66,11 @@ class SentBertMetric(BaseMetric):
                 key: value.to(self.config.device) for key, value in encoded_input.items()
             }
             
-            # Calculate embeddings
             with torch.no_grad():
                 model_output = self.model(**encoded_input)
             
-            # Perform pooling
             sent_embs = self.mean_pooling(model_output, encoded_input["attention_mask"])
             
-            # Normalize embeddings
             sent_embs = F.normalize(sent_embs, p=2, dim=1)
             
             n_source_embs = len(sent_embs) // 2
@@ -107,10 +101,8 @@ class SentBertMetric(BaseMetric):
         
         scores = {}
         
-        # Similarity between predictions and references
         if references is not None:
             if isinstance(references[0], list):
-                # Handle multiple references - compute average similarity
                 ref_scores = []
                 for pred, ref_list in zip(predictions, references):
                     pred_list = [pred] * len(ref_list)
@@ -120,11 +112,9 @@ class SentBertMetric(BaseMetric):
             else:
                 scores["sentbert_pred_ref"] = self._compute_similarity(predictions, references)
         
-        # Similarity between predictions and original texts
         if original_texts is not None:
             scores["sentbert_pred_src"] = self._compute_similarity(predictions, original_texts)
         
-        # Aggregate if requested
         if self.config.aggregate:
             scores = {key: float(np.mean(value)) for key, value in scores.items()}
         
