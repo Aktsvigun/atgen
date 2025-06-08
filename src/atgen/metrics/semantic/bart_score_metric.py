@@ -38,7 +38,11 @@ class BARTScorer:
     def score(self, srcs, tgts, batch_size=4):
         """Score a batch of examples"""
         score_list = []
+<<<<<<< HEAD
         for i in range(0, len(srcs), batch_size):
+=======
+        for i in tqdm(range(0, len(srcs), batch_size), desc="Calculating BARTScore..."):
+>>>>>>> a24e0f2 (removed dependencies chek)
             src_list = srcs[i : i + batch_size]
             tgt_list = tgts[i : i + batch_size]
             try:
@@ -112,6 +116,11 @@ class BartScoreMetric(BaseMetric):
         Returns:
             Dictionary with BARTScore results
         """
+<<<<<<< HEAD
+=======
+        if not self.is_available():
+            raise RuntimeError("BARTScore dependencies not available")
+>>>>>>> a24e0f2 (removed dependencies chek)
         
         self._initialize_scorer()
         

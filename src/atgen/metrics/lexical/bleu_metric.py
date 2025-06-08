@@ -7,6 +7,10 @@ import logging
 
 from ..base.base_metric import BaseMetric, MetricConfig
 
+<<<<<<< HEAD
+=======
+# Ensure nltk data is downloaded
+>>>>>>> a24e0f2 (removed dependencies chek)
 try:
     word_tokenize("test")
 except LookupError:
@@ -37,6 +41,10 @@ def smoothing_function(p_n, references, hypothesis, hyp_len):
 
 
 class BleuMetric(BaseMetric):
+<<<<<<< HEAD
+=======
+    """BLEU (Bilingual Evaluation Understudy) metric implementation."""
+>>>>>>> a24e0f2 (removed dependencies chek)
     
     @property
     def category(self) -> str:
@@ -47,7 +55,11 @@ class BleuMetric(BaseMetric):
         return True
     
     
+<<<<<<< HEAD
     def calculate(
+=======
+    def _compute(
+>>>>>>> a24e0f2 (removed dependencies chek)
         self,
         predictions: List[str],
         references: Optional[List[Union[str, List[str]]]] = None,
@@ -76,11 +88,16 @@ class BleuMetric(BaseMetric):
             tok_pred = word_tokenize(pred)
             
             try:
+<<<<<<< HEAD
                 score = corpus_bleu([tok_ref], [tok_pred], smoothing_function=smoothing_function)
+=======
+                score = corpus_bleu(tok_ref, [tok_pred], smoothing_function=smoothing_function)
+>>>>>>> a24e0f2 (removed dependencies chek)
                 scores.append(score)
             except (KeyError, ZeroDivisionError):
                 scores.append(0.0)
         
+<<<<<<< HEAD
         scores_dict = {"bleu": np.array(scores)}
         
         # Apply aggregation if requested
@@ -88,3 +105,6 @@ class BleuMetric(BaseMetric):
             scores_dict = {key: float(np.mean(value)) for key, value in scores_dict.items()}
         
         return scores_dict 
+=======
+        return {"bleu": np.array(scores)} 
+>>>>>>> a24e0f2 (removed dependencies chek)

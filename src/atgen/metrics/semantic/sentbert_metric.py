@@ -8,15 +8,27 @@ from ..base.base_metric import BaseMetric, MetricConfig
 
 
 class SentBertMetric(BaseMetric):
+<<<<<<< HEAD
+=======
+    """SentenceBERT semantic similarity metric."""
+>>>>>>> a24e0f2 (removed dependencies chek)
     
     def __init__(self, config: Optional[MetricConfig] = None):
         super().__init__(config)
         self.model = None
         self.tokenizer = None
+<<<<<<< HEAD
         self.checkpoint = (config.checkpoint if config and config.checkpoint else 'sentence-transformers/all-mpnet-base-v2')
     
     
     def _initialize_model(self):
+=======
+        self.checkpoint = getattr(config, 'checkpoint', 'sentence-transformers/all-mpnet-base-v2') if config else 'sentence-transformers/all-mpnet-base-v2'
+    
+    
+    def _initialize_model(self):
+        """Initialize the SentenceBERT model if not already initialized."""
+>>>>>>> a24e0f2 (removed dependencies chek)
         if self.model is None:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.checkpoint, 
@@ -56,6 +68,10 @@ class SentBertMetric(BaseMetric):
             end += half_batch_size
             batch_idx = slice(start, end)
             
+<<<<<<< HEAD
+=======
+            # Tokenize sentences
+>>>>>>> a24e0f2 (removed dependencies chek)
             encoded_input = self.tokenizer(
                 source_texts[batch_idx] + ref_texts[batch_idx],
                 padding=True,
@@ -66,11 +82,22 @@ class SentBertMetric(BaseMetric):
                 key: value.to(self.config.device) for key, value in encoded_input.items()
             }
             
+<<<<<<< HEAD
             with torch.no_grad():
                 model_output = self.model(**encoded_input)
             
             sent_embs = self.mean_pooling(model_output, encoded_input["attention_mask"])
             
+=======
+            # Calculate embeddings
+            with torch.no_grad():
+                model_output = self.model(**encoded_input)
+            
+            # Perform pooling
+            sent_embs = self.mean_pooling(model_output, encoded_input["attention_mask"])
+            
+            # Normalize embeddings
+>>>>>>> a24e0f2 (removed dependencies chek)
             sent_embs = F.normalize(sent_embs, p=2, dim=1)
             
             n_source_embs = len(sent_embs) // 2
@@ -101,8 +128,15 @@ class SentBertMetric(BaseMetric):
         
         scores = {}
         
+<<<<<<< HEAD
         if references is not None:
             if isinstance(references[0], list):
+=======
+        # Similarity between predictions and references
+        if references is not None:
+            if isinstance(references[0], list):
+                # Handle multiple references - compute average similarity
+>>>>>>> a24e0f2 (removed dependencies chek)
                 ref_scores = []
                 for pred, ref_list in zip(predictions, references):
                     pred_list = [pred] * len(ref_list)
@@ -112,9 +146,17 @@ class SentBertMetric(BaseMetric):
             else:
                 scores["sentbert_pred_ref"] = self._compute_similarity(predictions, references)
         
+<<<<<<< HEAD
         if original_texts is not None:
             scores["sentbert_pred_src"] = self._compute_similarity(predictions, original_texts)
         
+=======
+        # Similarity between predictions and original texts
+        if original_texts is not None:
+            scores["sentbert_pred_src"] = self._compute_similarity(predictions, original_texts)
+        
+        # Aggregate if requested
+>>>>>>> a24e0f2 (removed dependencies chek)
         if self.config.aggregate:
             scores = {key: float(np.mean(value)) for key, value in scores.items()}
         

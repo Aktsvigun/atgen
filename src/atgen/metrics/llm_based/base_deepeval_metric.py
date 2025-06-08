@@ -29,6 +29,7 @@ class BaseDeepEvalMetric(BaseMetric):
     def _initialize_llm(self):
         """Initialize the LLM for evaluation if not already initialized."""
         if self.llm is None:
+<<<<<<< HEAD
             # Determine base_url based on provider if not explicitly set
             base_url = self.config.base_url
             if base_url is None and self.config.provider:
@@ -64,6 +65,12 @@ class BaseDeepEvalMetric(BaseMetric):
                 api_key=self.config.api_key,
                 model=model,
                 base_url=base_url,
+=======
+            self.llm = EvaluationLLM(
+                api_key=self.config.api_key,
+                model=self.config.model or "openai/gpt-4o-2024-11-20",
+                base_url=self.config.base_url or "https://openrouter.ai/api/v1",
+>>>>>>> a24e0f2 (removed dependencies chek)
             )
     
     def _create_deepeval_metric(self, metric_class, **kwargs):
@@ -84,11 +91,19 @@ class BaseDeepEvalMetric(BaseMetric):
         if not test_cases:
             return {}
         
+<<<<<<< HEAD
+=======
+        # Disable printing to console during evaluation if not verbose
+>>>>>>> a24e0f2 (removed dependencies chek)
         original_stdout = sys.stdout
         if not self.config.verbose_mode:
             sys.stdout = open(os.devnull, "w")
         
         try:
+<<<<<<< HEAD
+=======
+            # Run evaluation
+>>>>>>> a24e0f2 (removed dependencies chek)
             evaluation_results = evaluate(
                 test_cases=test_cases,
                 metrics=[metric],

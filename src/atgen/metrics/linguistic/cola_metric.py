@@ -12,6 +12,10 @@ import nltk
 
 from ..base.base_metric import BaseMetric, MetricConfig
 
+<<<<<<< HEAD
+=======
+# Ensure NLTK data is downloaded
+>>>>>>> a24e0f2 (removed dependencies chek)
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
@@ -25,7 +29,11 @@ class ColaMetric(BaseMetric):
         super().__init__(config)
         self.model = None
         self.tokenizer = None
+<<<<<<< HEAD
         self.checkpoint = (config.checkpoint if config and config.checkpoint else 'Aktsvigun/electra-large-cola')
+=======
+        self.checkpoint = getattr(config, 'checkpoint', 'Aktsvigun/electra-large-cola') if config else 'Aktsvigun/electra-large-cola'
+>>>>>>> a24e0f2 (removed dependencies chek)
     
     
     def _initialize_model(self):
