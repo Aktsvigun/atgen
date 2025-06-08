@@ -14,6 +14,8 @@ class MetricConfig:
     checkpoint: Optional[str] = None
     model_name: Optional[str] = None
     
+    # API configuration parameters  
+    provider: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None

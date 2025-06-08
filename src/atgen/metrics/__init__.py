@@ -1,15 +1,3 @@
-"""
-Metrics module for evaluating text generation tasks.
-
-This module provides a comprehensive collection of metrics organized by category:
-- Lexical: BLEU, ROUGE
-- Semantic: BARTScore, AlignScore, SentBERT  
-- Linguistic: CoLA
-- LLM-based: DeepEval metrics, BigBenchHard
-
-The module uses a factory pattern for creating metrics and supports
-configuration-based instantiation.
-"""
 
 # Base classes
 from .base import BaseMetric, MetricConfig
@@ -43,26 +31,16 @@ from .factory import (
 )
 
 # Compute system
-from .compute_metrics_v2 import (
-    compute_metrics_v2,
+from .compute_metrics import (
+    compute_metrics,
     compute_metrics_from_config,
     get_default_config,
     get_comprehensive_config,
     get_deepeval_config,
 )
 
-# Legacy compute system (for backward compatibility)
-from .compute_metrics import compute_metrics
 
-# Legacy metrics functions (for backward compatibility)
-from .metrics import (
-    compute_bleu,
-    compute_rouge,
-    compute_bartscore,
-    compute_alignscore,
-    compute_sentbert,
-    compute_cola,
-)
+
 
 
 # Version
@@ -102,20 +80,13 @@ __all__ = [
     "get_metric_requirements",
     
     # New compute system  
-    "compute_metrics_v2",
+    "compute_metrics",
     "compute_metrics_from_config",
     "get_default_config",
     "get_comprehensive_config",
     "get_deepeval_config",
     
-    # Legacy compatibility
-    "compute_metrics",
-    "compute_bleu",
-    "compute_rouge",
-    "compute_bartscore",
-    "compute_alignscore",
-    "compute_sentbert",
-    "compute_cola",
+    "AVAILABLE_METRICS",
 ]
 
 
@@ -131,4 +102,6 @@ def create_metric(name: str, config: MetricConfig = None):
 
 def create_metrics_from_config(config):
     """Create metrics from configuration."""
-    return MetricsFactory.create_from_config(config) 
+    return MetricsFactory.create_from_config(config)
+
+AVAILABLE_METRICS = MetricsFactory.get_available_metrics() 

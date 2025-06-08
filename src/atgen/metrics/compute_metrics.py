@@ -2,7 +2,7 @@ from time import time
 from typing import List, Dict, Union, Optional
 import logging
 import numpy as np
-from omegaconf import DictConfiga
+from omegaconf import DictConfig
 
 from .factory import MetricsFactory, MetricsConfig, get_metric_requirements
 from .base import MetricConfig
@@ -11,46 +11,56 @@ logger = logging.getLogger(__name__)
 
 
 def compute_metrics(
-    predictions: List[str],
-    references: Optional[List[Union[str, List[str]]]] = None,
+    generated_texts: List[str],
+    reference_texts: Optional[List[Union[str, List[str]]]] = None,
     original_texts: Optional[List[str]] = None,
-    metrics_config: Optional[Union[Dict, DictConfig, MetricsConfig]] = None,
+    config: Optional[Union[Dict, DictConfig, MetricsConfig]] = None,
     model=None,
     tokenizer=None,
+    cache_dir: Optional[str] = None,
 ) -> Dict[str, float]:
     """
     Compute various metrics for generated texts using the new architecture.
     
     Args:
-        predictions: List of generated texts to evaluate
-        references: List of reference texts (ground truth) or list of lists for multiple references
+        generated_texts: List of generated texts to evaluate
+        reference_texts: List of reference texts (ground truth) or list of lists for multiple references
         original_texts: List of source texts
-        metrics_config: Configuration for metrics (dict, DictConfig, or MetricsConfig)
+        config: Configuration for metrics (dict, DictConfig, or MetricsConfig)
         model: Model instance (required for BigBenchHard)
         tokenizer: Tokenizer instance (required for BigBenchHard)
+        cache_dir: Cache directory for storing intermediate results
     
     Returns:
         Dictionary with metric scores and timing information
     """
     start_total = time()
     
+    predictions = generated_texts
+    references = reference_texts
+    
+    # Handle cache_dir in the config
+    if cache_dir is not None and isinstance(config, dict):
+        config = dict(config)  # Make a copy
+        config["cache_dir"] = cache_dir
+    
     # Handle different config types
-    if metrics_config is None:
+    if config is None:
         # Default configuration
-        config = MetricsConfig(
+        metrics_config = MetricsConfig(
             metrics=["bleu", "rouge"],
             batch_size=32,
             device="cuda",
             aggregate=True
         )
-    elif isinstance(metrics_config, dict):
-        config = MetricsConfig(**metrics_config)
-    elif isinstance(metrics_config, DictConfig):
+    elif isinstance(config, dict):
+        metrics_config = MetricsConfig(**config)
+    elif isinstance(config, DictConfig):
         # Convert OmegaConf to dict then to MetricsConfig
-        config_dict = dict(metrics_config)
-        config = MetricsConfig(**config_dict)
+        config_dict = dict(config)
+        metrics_config = MetricsConfig(**config_dict)
     else:
-        config = metrics_config
+        metrics_config = config
     
     # Validate inputs
     if not predictions:
@@ -60,7 +70,7 @@ def compute_metrics(
     requirements = get_metric_requirements()
     
     # Create metrics using factory
-    metrics = MetricsFactory.create_metrics(config)
+    metrics = MetricsFactory.create_metrics(metrics_config)
     
     if not metrics:
         logger.warning("No metrics were successfully created")

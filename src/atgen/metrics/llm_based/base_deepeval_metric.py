@@ -29,10 +29,41 @@ class BaseDeepEvalMetric(BaseMetric):
     def _initialize_llm(self):
         """Initialize the LLM for evaluation if not already initialized."""
         if self.llm is None:
+            # Determine base_url based on provider if not explicitly set
+            base_url = self.config.base_url
+            if base_url is None and self.config.provider:
+                provider = self.config.provider.lower()
+                if provider == "openai":
+                    base_url = "https://api.openai.com/v1"
+                elif provider == "anthropic":
+                    base_url = "https://api.anthropic.com/v1"
+                elif provider == "openrouter":
+                    base_url = "https://openrouter.ai/api/v1"
+                else:
+                    self.logger.warning(f"Unknown provider '{provider}', using default base_url")
+                    base_url = "https://openrouter.ai/api/v1"
+            else:
+                base_url = base_url or "https://openrouter.ai/api/v1"
+            
+            # Determine default model based on provider if not explicitly set
+            model = self.config.model
+            if model is None and self.config.provider:
+                provider = self.config.provider.lower()
+                if provider == "openai":
+                    model = "gpt-4o-mini"
+                elif provider == "anthropic":
+                    model = "claude-3-5-sonnet"
+                elif provider == "openrouter":
+                    model = "openai/gpt-4o-mini"
+                else:
+                    model = "openai/gpt-4o-mini"
+            else:
+                model = model or "openai/gpt-4o-mini"
+            
             self.llm = EvaluationLLM(
                 api_key=self.config.api_key,
-                model=self.config.model or "openai/gpt-4o-2024-11-20",
-                base_url=self.config.base_url or "https://openrouter.ai/api/v1",
+                model=model,
+                base_url=base_url,
             )
     
     def _create_deepeval_metric(self, metric_class, **kwargs):

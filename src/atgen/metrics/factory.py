@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MetricsConfig:
-    """Configuration for the metrics system."""
     
     batch_size: int = 32
     device: str = "cuda"
@@ -28,9 +27,12 @@ class MetricsConfig:
     
     metrics: List[str] = field(default_factory=list)
     
+    additional_metrics: List[str] = field(default_factory=list)
+    
     checkpoint: Optional[str] = None
     model_name: Optional[str] = None
     
+    provider: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
@@ -42,37 +44,61 @@ class MetricsConfig:
     verbose_mode: bool = False
     truths_extraction_limit: Optional[int] = None
     
+    deepeval_threshold: Optional[float] = None
+    deepeval_include_reason: Optional[bool] = None
+    deepeval_strict_mode: Optional[bool] = None
+    deepeval_async_mode: Optional[bool] = None
+    deepeval_verbose_mode: Optional[bool] = None
+    deepeval_truths_extraction_limit: Optional[int] = None
+    
     benchmark_params: Dict[str, Any] = field(default_factory=dict)
     generation_params: Dict[str, Any] = field(default_factory=dict)
+    
     custom_params: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Post-initialization to handle legacy parameter mappings."""
+        # Merge additional_metrics into metrics for backward compatibility
+        if self.additional_metrics:
+            self.metrics.extend(self.additional_metrics)
+            # Remove duplicates while preserving order
+            seen = set()
+            self.metrics = [x for x in self.metrics if not (x in seen or seen.add(x))]
+            
+        # Handle DeepEval legacy parameter mappings
+        if self.deepeval_threshold is not None:
+            self.threshold = self.deepeval_threshold
+        if self.deepeval_include_reason is not None:
+            self.include_reason = self.deepeval_include_reason
+        if self.deepeval_strict_mode is not None:
+            self.strict_mode = self.deepeval_strict_mode
+        if self.deepeval_async_mode is not None:
+            self.async_mode = self.deepeval_async_mode
+        if self.deepeval_verbose_mode is not None:
+            self.verbose_mode = self.deepeval_verbose_mode
+        if self.deepeval_truths_extraction_limit is not None:
+            self.truths_extraction_limit = self.deepeval_truths_extraction_limit
 
 
 class MetricsFactory:
     """Factory for creating metric instances."""
     
-    # Registry mapping metric names to classes
     _metric_registry = {
-        # Lexical metrics
         "bleu": BleuMetric,
         "rouge": RougeMetric,
         
-        # Semantic metrics
         "bartscore": BartScoreMetric,
         "alignscore": AlignScoreMetric,
         "sentbert": SentBertMetric,
         "sentence_bert": SentBertMetric,  # Alias
         
-        # Linguistic metrics
         "cola": ColaMetric,
         "grammaticality": ColaMetric,  # Alias
         
-        # LLM-based metrics
         "deepeval_answer_relevance": DeepEvalAnswerRelevancyMetric,
         "deepeval_faithfulness": DeepEvalFaithfulnessMetric,
         "deepeval_summarization": DeepEvalSummarizationMetric,
         "deepeval_prompt_alignment": DeepEvalPromptAlignmentMetric,
-        
-        # Benchmark metrics
         "bigbench_hard": BigBenchHardMetric,
         "big_bench_hard": BigBenchHardMetric,  # Alias
     }
@@ -90,19 +116,7 @@ class MetricsFactory:
     
     @classmethod
     def create_metric(cls, name: str, config: Optional[MetricConfig] = None) -> BaseMetric:
-        """
-        Create a single metric instance.
-        
-        Args:
-            name: Name of the metric to create
-            config: Configuration for the metric
-            
-        Returns:
-            Metric instance
-            
-        Raises:
-            ValueError: If metric name is not recognized
-        """
+
         name = name.lower().strip()
         
         if name not in cls._metric_registry:
@@ -114,15 +128,6 @@ class MetricsFactory:
     
     @classmethod
     def create_metrics(cls, metrics_config: MetricsConfig) -> Dict[str, BaseMetric]:
-        """
-        Create multiple metric instances from configuration.
-        
-        Args:
-            metrics_config: Configuration containing list of metrics to create
-            
-        Returns:
-            Dictionary mapping metric names to instances
-        """
         base_config = MetricConfig(
             batch_size=metrics_config.batch_size,
             device=metrics_config.device,
@@ -130,6 +135,7 @@ class MetricsFactory:
             aggregate=metrics_config.aggregate,
             checkpoint=metrics_config.checkpoint,
             model_name=metrics_config.model_name,
+            provider=metrics_config.provider,
             api_key=metrics_config.api_key,
             base_url=metrics_config.base_url,
             model=metrics_config.model,
@@ -156,15 +162,7 @@ class MetricsFactory:
     
     @classmethod
     def create_from_config(cls, config: Union[Dict[str, Any], MetricsConfig]) -> Dict[str, BaseMetric]:
-        """
-        Create metrics from dictionary or MetricsConfig.
-        
-        Args:
-            config: Configuration dictionary or MetricsConfig instance
-            
-        Returns:
-            Dictionary mapping metric names to instances
-        """
+
         if isinstance(config, dict):
             metrics_config = MetricsConfig(**config)
         else:
@@ -174,7 +172,6 @@ class MetricsFactory:
 
 
 def get_metric_categories() -> Dict[str, List[str]]:
-    """Get metrics organized by category."""
     return {
         "lexical": ["bleu", "rouge"],
         "semantic": ["bartscore", "alignscore", "sentbert"],
@@ -190,7 +187,7 @@ def get_metric_categories() -> Dict[str, List[str]]:
 
 
 def get_metric_requirements() -> Dict[str, Dict[str, bool]]:
-    """Get input requirements for each metric."""
+
     return {
         "bleu": {"requires_references": True, "requires_original_texts": False},
         "rouge": {"requires_references": True, "requires_original_texts": False},
