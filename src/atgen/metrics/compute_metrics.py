@@ -267,36 +267,14 @@ def get_comprehensive_config() -> MetricsConfig:
                 ]
             )
         else:
-            result["exact_match"] = np.array(
-                [pred == ref for pred, ref in zip(generated_texts, reference_texts)]
-            )
-        # BLEU
-        start_time = time()
-        result["bleu"] = np.array(
-            [
-                pair_bleu(references=ref, prediction=pred)
-                for pred, ref in tqdm(zip(generated_texts, reference_texts))
+            ref_lengths = np.array([len(text.split()) for text in references])
+        
+        gen_lengths = np.array([len(text.split()) for text in predictions])
+        if isinstance(references[0], list):
+            exact_matches = [
+                any(pred == ref for ref in ref_list)
+                for pred, ref_list in zip(predictions, references)
             ]
-        )
-        time_dict["time_bleu"] = time() - start_time
-        # ROUGE
-        start_time = time()
-        result.update(
-            rouge.compute(
-                predictions=generated_texts,
-                references=reference_texts,
-                use_stemmer=True,
-            )
-        )
-        time_dict["time_rouge"] = time() - start_time
-        # Sacrebleu
-        start_time = time()
-        if not isinstance(reference_texts[0], list):
-            sacrebleu_references = [[ref] for ref in reference_texts]
-            sacrebleu_result = sacrebleu.compute(
-                predictions=generated_texts, references=sacrebleu_references
-            )
-            result["sacrebleu"] = sacrebleu_result.pop("score")
         else:
             sacrebleu_scores = []
             for pred, ref in zip(generated_texts, reference_texts):
