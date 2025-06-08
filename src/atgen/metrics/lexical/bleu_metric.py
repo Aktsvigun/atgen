@@ -48,15 +48,6 @@ class BleuMetric(BaseMetric):
     def supports_multiple_references(self) -> bool:
         return True
     
-    def _check_dependencies(self) -> bool:
-        """Check if NLTK is available."""
-        try:
-            import nltk
-            # Try to use word_tokenize to ensure punkt is available
-            word_tokenize("test")
-            return True
-        except (ImportError, LookupError):
-            return False
     
     def _compute(
         self,

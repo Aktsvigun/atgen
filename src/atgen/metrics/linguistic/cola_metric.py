@@ -28,16 +28,6 @@ class ColaMetric(BaseMetric):
         self.tokenizer = None
         self.checkpoint = getattr(config, 'checkpoint', 'Aktsvigun/electra-large-cola') if config else 'Aktsvigun/electra-large-cola'
     
-    def _check_dependencies(self) -> bool:
-        """Check if required dependencies are available."""
-        try:
-            import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
-            from datasets import Dataset
-            import nltk
-            return True
-        except ImportError:
-            return False
     
     def _initialize_model(self):
         """Initialize the CoLA model if not already initialized."""
@@ -63,8 +53,6 @@ class ColaMetric(BaseMetric):
         Returns:
             Dictionary with CoLA scores
         """
-        if not self.is_available():
-            raise RuntimeError("CoLA dependencies not available")
         
         self._initialize_model()
         

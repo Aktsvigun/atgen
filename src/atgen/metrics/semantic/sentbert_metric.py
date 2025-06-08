@@ -16,14 +16,6 @@ class SentBertMetric(BaseMetric):
         self.tokenizer = None
         self.checkpoint = getattr(config, 'checkpoint', 'sentence-transformers/all-mpnet-base-v2') if config else 'sentence-transformers/all-mpnet-base-v2'
     
-    def _check_dependencies(self) -> bool:
-        """Check if required dependencies are available."""
-        try:
-            import torch
-            from transformers import AutoTokenizer, AutoModel
-            return True
-        except ImportError:
-            return False
     
     def _initialize_model(self):
         """Initialize the SentenceBERT model if not already initialized."""
@@ -110,10 +102,7 @@ class SentBertMetric(BaseMetric):
             
         Returns:
             Dictionary with semantic similarity scores
-        """
-        if not self.is_available():
-            raise RuntimeError("SentenceBERT dependencies not available")
-        
+        """        
         self._initialize_model()
         
         scores = {}

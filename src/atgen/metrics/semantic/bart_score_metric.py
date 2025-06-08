@@ -90,15 +90,7 @@ class BartScoreMetric(BaseMetric):
         self.scorer = None
         self.checkpoint = getattr(config, 'checkpoint', 'facebook/bart-large-cnn') if config else 'facebook/bart-large-cnn'
     
-    def _check_dependencies(self) -> bool:
-        """Check if required dependencies are available."""
-        try:
-            import torch
-            from transformers import BartTokenizer, BartForConditionalGeneration
-            return True
-        except ImportError:
-            return False
-    
+
     def _initialize_scorer(self):
         """Initialize the BARTScorer if not already initialized."""
         if self.scorer is None:

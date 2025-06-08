@@ -12,14 +12,6 @@ class RougeMetric(BaseMetric):
         super().__init__(config)
         self.rouge = None
     
-    def _check_dependencies(self) -> bool:
-        """Check if ROUGE is available."""
-        try:
-            from evaluate import load
-            return True
-        except ImportError:
-            return False
-    
     def _initialize_rouge(self):
         """Initialize ROUGE if not already initialized."""
         if self.rouge is None:
@@ -37,8 +29,6 @@ class RougeMetric(BaseMetric):
         Returns:
             Dictionary with ROUGE scores
         """
-        if not self.is_available():
-            raise RuntimeError("ROUGE dependencies not available")
         
         if references is None:
             raise ValueError("ROUGE requires reference texts")

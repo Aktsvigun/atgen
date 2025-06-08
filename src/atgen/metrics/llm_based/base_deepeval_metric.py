@@ -20,16 +20,6 @@ class BaseDeepEvalMetric(BaseMetric):
         super().__init__(config)
         self.llm = None
     
-    def _check_dependencies(self) -> bool:
-        """Check if DeepEval dependencies are available."""
-        try:
-            from deepeval import evaluate
-            from deepeval.test_case import LLMTestCase
-            from openai import OpenAI, AsyncOpenAI
-            return True
-        except ImportError:
-            return False
-    
     def _validate_config(self):
         """Validate DeepEval configuration."""
         super()._validate_config()

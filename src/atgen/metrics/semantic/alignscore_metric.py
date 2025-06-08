@@ -3,7 +3,7 @@ from typing import List, Dict, Union, Optional
 from urllib.request import urlretrieve
 from pathlib import Path
 import numpy as np
-
+from alignscore import AlignScore
 from ..base.base_metric import BaseMetric, MetricConfig
 
 # Default AlignScore checkpoint path
@@ -24,13 +24,6 @@ class AlignScoreMetric(BaseMetric):
         self.scorer = None
         self.checkpoint_path = getattr(config, 'checkpoint_path', ALIGNSCORE_CHECKPOINT_PATH) if config else ALIGNSCORE_CHECKPOINT_PATH
     
-    def _check_dependencies(self) -> bool:
-        """Check if AlignScore is available."""
-        try:
-            from alignscore import AlignScore
-            return True
-        except ImportError:
-            return False
     
     def _initialize_scorer(self):
         """Initialize the AlignScore scorer if not already initialized."""
@@ -43,7 +36,6 @@ class AlignScoreMetric(BaseMetric):
                     self.checkpoint_path,
                 )
             
-            from alignscore import AlignScore
             self.scorer = AlignScore(
                 model="roberta-base",
                 batch_size=self.config.batch_size,
@@ -63,10 +55,7 @@ class AlignScoreMetric(BaseMetric):
             
         Returns:
             Dictionary with AlignScore results
-        """
-        if not self.is_available():
-            raise RuntimeError("AlignScore dependencies not available")
-        
+        """        
         if original_texts is None:
             raise ValueError("AlignScore requires original texts")
         

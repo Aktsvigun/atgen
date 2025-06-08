@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Dict, Any
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -15,6 +15,7 @@ class MetricConfig:
     
     # Model-specific parameters (for local models)
     checkpoint: Optional[str] = None
+    model_name: Optional[str] = None
     
     # API-based parameters (for LLM-based metrics)
     api_key: Optional[str] = None
@@ -28,6 +29,10 @@ class MetricConfig:
     async_mode: bool = True
     verbose_mode: bool = False
     truths_extraction_limit: Optional[int] = None
+    
+    # BigBenchHard specific parameters
+    benchmark_params: Dict[str, Any] = field(default_factory=dict)
+    generation_params: Dict[str, Any] = field(default_factory=dict)
 
 
 class BaseMetric(ABC):
@@ -51,17 +56,6 @@ class BaseMetric(ABC):
     
     def _validate_config(self):
         """Validate configuration - can be overridden by subclasses."""
-        pass
-    
-    def is_available(self) -> bool:
-        """Check if dependencies are available."""
-        if self._is_available is None:
-            self._is_available = self._check_dependencies()
-        return self._is_available
-    
-    @abstractmethod
-    def _check_dependencies(self) -> bool:
-        """Check if required dependencies are available."""
         pass
     
     @abstractmethod
