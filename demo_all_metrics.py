@@ -11,14 +11,14 @@ from atgen.metrics.base import BaseMetric, MetricConfig
 from atgen.metrics.lexical import BleuMetric, RougeMetric
 from atgen.metrics.semantic import BartScoreMetric, AlignScoreMetric, SentBertMetric
 from atgen.metrics.linguistic import ColaMetric
-# Note: llm-based directory needs to be renamed to llm_based for Python imports
-# from atgen.metrics.llm_based import (
-#     DeepEvalAnswerRelevancyMetric,
-#     DeepEvalFaithfulnessMetric,
-#     DeepEvalSummarizationMetric,
-#     DeepEvalPromptAlignmentMetric,
-#     EvaluationLLM
-# )
+from atgen.metrics.llm_based import (
+    DeepEvalAnswerRelevancyMetric,
+    DeepEvalFaithfulnessMetric,
+    DeepEvalSummarizationMetric,
+    DeepEvalPromptAlignmentMetric,
+    BigBenchHardMetric,
+    EvaluationLLM
+)
 
 
 def demo_all_metrics():
@@ -83,12 +83,15 @@ def demo_all_metrics():
         "🗣️ Linguistic Quality": [
             ("CoLA (Grammaticality)", ColaMetric(base_config)),
         ],
-        # "🤖 LLM-based (DeepEval)": [
-        #     ("Answer Relevancy", DeepEvalAnswerRelevancyMetric(deepeval_config)),
-        #     ("Faithfulness", DeepEvalFaithfulnessMetric(deepeval_config)),
-        #     ("Summarization", DeepEvalSummarizationMetric(deepeval_config)),
-        #     ("Prompt Alignment", DeepEvalPromptAlignmentMetric(deepeval_config)),
-        # ]
+        "🤖 LLM-based (DeepEval)": [
+            ("Answer Relevancy", DeepEvalAnswerRelevancyMetric(deepeval_config)),
+            ("Faithfulness", DeepEvalFaithfulnessMetric(deepeval_config)),
+            ("Summarization", DeepEvalSummarizationMetric(deepeval_config)),
+            ("Prompt Alignment", DeepEvalPromptAlignmentMetric(deepeval_config)),
+        ],
+        "🧮 Benchmark Metrics": [
+            ("BigBenchHard", BigBenchHardMetric(deepeval_config)),
+        ]
     }
     
     print(f"📊 Testing with {len(predictions)} samples\n")
@@ -116,6 +119,14 @@ def demo_all_metrics():
                             results = metric.calculate(predictions, references, original_texts)
                         else:
                             results = metric.calculate(predictions, None, original_texts)
+                    
+                    elif metric_name == "BigBenchHard":
+                        # BigBenchHard needs a model and tokenizer, skip for demo
+                        print(f"      ⚠️  Requires model and tokenizer (use set_model_and_tokenizer())")
+                        print(f"      💡 Example: metric.set_model_and_tokenizer(model, tokenizer)")
+                        print(f"                 score = metric.evaluate_benchmark(model, tokenizer)")
+                        print()
+                        continue
                     
                     elif metric_name == "CoLA (Grammaticality)":
                         # CoLA only needs predictions
@@ -149,6 +160,7 @@ def demo_all_metrics():
     print("   ✅ Proper error handling and logging")
     print("   ✅ Support for multiple references")
     print("   ✅ API-based metrics with custom LLM implementation")
+    print("   ✅ Benchmark metrics (BigBenchHard)")
     print("   ✅ Configurable aggregation")
     print("   ✅ Type safety with full type hints")
     
