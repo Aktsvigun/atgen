@@ -174,10 +174,10 @@ def compute_metrics_from_config(
         Dictionary with metric scores
     """
     return compute_metrics(
-        predictions=predictions,
-        references=references,
+        generated_texts=predictions,
+        reference_texts=references,
         original_texts=original_texts,
-        metrics_config=config_dict,
+        config=config_dict,
         model=model,
         tokenizer=tokenizer
     )

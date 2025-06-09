@@ -25,7 +25,7 @@ class ColaMetric(BaseMetric):
         super().__init__(config)
         self.model = None
         self.tokenizer = None
-        self.checkpoint = getattr(config, 'checkpoint', 'Aktsvigun/electra-large-cola') if config else 'Aktsvigun/electra-large-cola'
+        self.checkpoint = (config.checkpoint if config and config.checkpoint else 'Aktsvigun/electra-large-cola')
     
     
     def _initialize_model(self):

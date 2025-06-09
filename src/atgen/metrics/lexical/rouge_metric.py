@@ -59,4 +59,11 @@ class RougeMetric(BaseMetric):
             else:
                 scores[key] = float(value)
         
+        # ROUGE already aggregates by default, but we need to handle the case
+        # where it returns arrays (though this is typically rare)
+        if self.config.aggregate:
+            for key, value in scores.items():
+                if isinstance(value, np.ndarray):
+                    scores[key] = float(np.mean(value))
+        
         return scores 

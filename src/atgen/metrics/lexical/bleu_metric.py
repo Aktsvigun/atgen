@@ -47,7 +47,7 @@ class BleuMetric(BaseMetric):
         return True
     
     
-    def _compute(
+    def calculate(
         self,
         predictions: List[str],
         references: Optional[List[Union[str, List[str]]]] = None,
@@ -76,9 +76,15 @@ class BleuMetric(BaseMetric):
             tok_pred = word_tokenize(pred)
             
             try:
-                score = corpus_bleu(tok_ref, [tok_pred], smoothing_function=smoothing_function)
+                score = corpus_bleu([tok_ref], [tok_pred], smoothing_function=smoothing_function)
                 scores.append(score)
             except (KeyError, ZeroDivisionError):
                 scores.append(0.0)
         
-        return {"bleu": np.array(scores)} 
+        scores_dict = {"bleu": np.array(scores)}
+        
+        # Apply aggregation if requested
+        if self.config.aggregate:
+            scores_dict = {key: float(np.mean(value)) for key, value in scores_dict.items()}
+        
+        return scores_dict 

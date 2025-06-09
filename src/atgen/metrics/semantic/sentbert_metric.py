@@ -13,7 +13,7 @@ class SentBertMetric(BaseMetric):
         super().__init__(config)
         self.model = None
         self.tokenizer = None
-        self.checkpoint = getattr(config, 'checkpoint', 'sentence-transformers/all-mpnet-base-v2') if config else 'sentence-transformers/all-mpnet-base-v2'
+        self.checkpoint = (config.checkpoint if config and config.checkpoint else 'sentence-transformers/all-mpnet-base-v2')
     
     
     def _initialize_model(self):
