@@ -36,7 +36,7 @@ def register_resolvers() -> None:
         "multiply_with_few_shot": multiply_with_few_shot,
         "to_string": to_string,
     }
-    
+
     for name, resolver_fn in resolvers_to_register.items():
         try:
             OmegaConf.register_new_resolver(name, resolver_fn)

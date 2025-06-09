@@ -2,7 +2,9 @@ import os
 from typing import Union
 
 from datasets import load_dataset, load_from_disk, Dataset, DatasetDict
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
+
+from .get_output_column_name import get_output_column_name
 
 
 def _fetch_dataset(
@@ -10,8 +12,11 @@ def _fetch_dataset(
     subset_name: str,
     fetch_kwargs: dict | DictConfig,
 ) -> Dataset:
+    # Load a subset of a dataset from HuggingFace
+    if isinstance(dataset_name_or_path, (list, ListConfig)):
+        dataset = load_dataset(*dataset_name_or_path, **fetch_kwargs)
     # Load local dataset
-    if os.path.exists(dataset_name_or_path):
+    elif os.path.exists(dataset_name_or_path):
         # Load a saved on disk dataset
         if os.path.isdir(dataset_name_or_path):
             # Remove `cache_dir` from fetch_kwargs
@@ -28,8 +33,6 @@ def _fetch_dataset(
                 f"Unexpected format {dataset_name_or_path.split('.')[-1]} of the dataset. Supported formats: csv, json."
             )
     # Load dataset from HuggingFace
-    elif isinstance(dataset_name_or_path, list):
-        dataset = load_dataset(*dataset_name_or_path, **fetch_kwargs)
     else:
         dataset = load_dataset(dataset_name_or_path, **fetch_kwargs)
 
@@ -51,8 +54,37 @@ def _take_subset(dataset_subset: Dataset, size: int, seed: int) -> Dataset:
         return dataset_subset
     dataset_subset = dataset_subset.shuffle(seed=seed)
     dataset_subset = dataset_subset.select(range(size))
-    dataset_subset = dataset_subset.remove_columns(["id"]).add_column("id", list(range(len(dataset_subset))))
+    dataset_subset = dataset_subset.remove_columns(["id"]).add_column(
+        "id", list(range(len(dataset_subset)))
+    )
     return dataset_subset
+
+
+def _preprocess_multicolumn_labels(
+    dataset: Dataset,
+    output_column_names: Union[
+        DictConfig, ListConfig, dict[str, Union[str, list[str]]], list[str], str
+    ],
+) -> Dataset:
+    if isinstance(output_column_names, (list, ListConfig)):
+        new_column_name = get_output_column_name(output_column_names)
+        values = []
+        for inst in dataset:
+            for col_name in output_column_names:
+                inst = inst[col_name]
+            values.append(inst)
+        dataset = dataset.add_column(new_column_name, values)
+    elif isinstance(output_column_names, (dict, DictConfig)):
+        for _, column_name in output_column_names.items():
+            dataset = _preprocess_multicolumn_labels(dataset, column_name)
+    # Nothing to preprocess in this case
+    elif isinstance(output_column_names, str):
+        pass
+    else:
+        raise NotImplementedError(
+            f"Unexpected type {type(output_column_names)} of the output column names."
+        )
+    return dataset
 
 
 def load_data(
@@ -62,19 +94,22 @@ def load_data(
     seed: int,
 ) -> Dataset:
     if split == "train":
-        subset_name = data_config.get("train_subset_name", split)
+        subset_name = data_config.get("train_split_name", split)
         subset_size = data_config.get("train_subset_size")
     elif split == "test":
-        subset_name = data_config.get("test_subset_name", split)
+        subset_name = data_config.get("test_split_name", split)
         subset_size = data_config.get("test_subset_size")
     else:
         raise NotImplementedError(
             f"Unexpected split {split}; Please specify either `train` or `test`."
         )
     dataset = _fetch_dataset(
-        data_config.dataset,
-        subset_name,
-        dict(data_config.fetch_kwargs, cache_dir=cache_dir),
+        dataset_name_or_path=data_config.dataset,
+        subset_name=subset_name,
+        fetch_kwargs=dict(data_config.fetch_kwargs, cache_dir=cache_dir),
+    )
+    dataset = _preprocess_multicolumn_labels(
+        dataset=dataset, output_column_names=data_config.output_column_name
     )
 
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)
