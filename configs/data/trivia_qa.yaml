@@ -1,6 +1,6 @@
 dataset: ['mandarjoshi/trivia_qa', 'rc.wikipedia']
 input_column_name: 'question'
-output_column_name: ['answer', 'value']
+output_column_name: {'train': ['answer', 'value'], 'test': ['answer', 'aliases']}
 unlabeled_data_split_name: train
 test_split_name: validation
 train_subset_size: null
