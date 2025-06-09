@@ -325,7 +325,7 @@ def generate(
 def tokenize_conversational_example(
     example: dict[str, Any], tokenizer: PreTrainedTokenizer
 ) -> dict[str, list[int]]:
-    input_ids = tokenizer.apply_chat_template(example["messages"])
+    input_ids = tokenizer.apply_chat_template(example["messages"], continue_final_message=True)
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}
 
