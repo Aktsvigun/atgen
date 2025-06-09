@@ -21,7 +21,7 @@ from .constants import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     MESSAGES_COLUMN_NAME,
-    DEEPSEEK_R1_END_REASONING_TOKEN,
+    REASONING_END_TOKEN,
 )
 
 from .training_utils import _get_data_collator
@@ -72,12 +72,22 @@ def generate_vllm(
     gc.collect()
     cuda.empty_cache()
 
-    params = SamplingParams(
+    sampling_params = SamplingParams(
         temperature=inference_config.get("temperature", DEFAULT_TEMPERATURE),
         seed=42,  # TODO: make arbitrary
         max_tokens=inference_config.max_new_tokens,
         top_p=inference_config.get("top_p", DEFAULT_TOP_P),
     )
+    if data_config.assistant_response_start:
+        generation_params = {
+            "add_generation_prompt": False,
+            "continue_final_message": True,
+        }
+    else:
+        generation_params = {
+            "add_generation_prompt": True,
+            "continue_final_message": False,
+        }
 
     generations = []
     num_batches = ceil(len(data) / inference_config.batch_size)
@@ -85,16 +95,16 @@ def generate_vllm(
         batch = data[
             i * inference_config.batch_size : (i + 1) * inference_config.batch_size
         ][MESSAGES_COLUMN_NAME]
-        out = llm_runner.chat(batch, params, use_tqdm=False)
+        out = llm_runner.chat(
+            batch, sampling_params, use_tqdm=False, **generation_params
+        )
         batch_generations = [x.outputs[0].text for x in out]
         generations += batch_generations
 
     # Remove reasoning tokens from DeepSeek-R1
     if "deepseek-r1" in llm_runner.llm_engine.model_config.model:
         for i, generation in enumerate(generations):
-            generations[i] = DEEPSEEK_R1_END_REASONING_TOKEN.join(
-                generation.split(DEEPSEEK_R1_END_REASONING_TOKEN)[1:]
-            ).strip()
+            generations[i] = _remove_thinking_part(generation)
 
     if delete_vllm_after_inference:
         del llm_runner
@@ -318,3 +328,7 @@ def tokenize_conversational_example(
     input_ids = tokenizer.apply_chat_template(example["messages"])
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+
+def _remove_thinking_part(text: str) -> str:
+    return REASONING_END_TOKEN.join(text.split(REASONING_END_TOKEN)[1:]).strip()
