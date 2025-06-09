@@ -152,11 +152,16 @@ def compute_metrics(
                 )
                 sacrebleu_scores.append(sacrebleu_result.pop("score"))
             result["sacrebleu"] = sacrebleu_scores
-        
+
         time_dict["time_sacrebleu"] = time() - start_time
         # Lengths
         if isinstance(reference_texts[0], list):
-            ref_word_lengths = np.array([np.mean([len(text.split()) for text in ref]) for ref in reference_texts])
+            ref_word_lengths = np.array(
+                [
+                    np.mean([len(text.split()) for text in ref])
+                    for ref in reference_texts
+                ]
+            )
         else:
             ref_word_lengths = np.array([len(ref.split()) for ref in reference_texts])
         # Avoid division by zero
