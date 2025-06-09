@@ -344,7 +344,9 @@ def calculate_alignscore(
     if isinstance(references[0], list):
         scores_baseline = []
         for orig_text, refs in zip(original_texts, references):
-            inst_baseline_scores = scorer.score(contexts=[orig_text] * len(refs), claims=refs)
+            inst_baseline_scores = scorer.score(
+                contexts=[orig_text] * len(refs), claims=refs
+            )
             scores_baseline.append(max(inst_baseline_scores))
     else:
         scores_baseline = scorer.score(contexts=original_texts, claims=references)

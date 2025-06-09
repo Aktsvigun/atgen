@@ -53,8 +53,12 @@ def run_active_learning(config, workdir: Union[str, Path]):
     cache_dir = config.cache_dir
     input_column_name = config.data.input_column_name
     dev_split_size = config.training.dev_split_size
-    output_column_name_train = get_output_column_name(config.data.output_column_name, purpose=OUTPUT_FIELD_PURPOSE_TRAIN)
-    output_column_name_test = get_output_column_name(config.data.output_column_name, purpose=OUTPUT_FIELD_PURPOSE_TEST)
+    output_column_name_train = get_output_column_name(
+        config.data.output_column_name, purpose=OUTPUT_FIELD_PURPOSE_TRAIN
+    )
+    output_column_name_test = get_output_column_name(
+        config.data.output_column_name, purpose=OUTPUT_FIELD_PURPOSE_TEST
+    )
 
     model_name = config.model.checkpoint
 

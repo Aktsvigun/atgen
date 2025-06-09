@@ -59,7 +59,13 @@ def _take_subset(dataset_subset: Dataset, size: int, seed: int) -> Dataset:
     )
     return dataset_subset
 
-def _preprocess_multicolumn_labels(dataset: Dataset, output_column_names: Union[DictConfig, ListConfig, dict[str, Union[str, list[str]]], list[str], str]) -> Dataset:
+
+def _preprocess_multicolumn_labels(
+    dataset: Dataset,
+    output_column_names: Union[
+        DictConfig, ListConfig, dict[str, Union[str, list[str]]], list[str], str
+    ],
+) -> Dataset:
     if isinstance(output_column_names, (list, ListConfig)):
         new_column_name = get_output_column_name(output_column_names)
         values = []
@@ -75,8 +81,11 @@ def _preprocess_multicolumn_labels(dataset: Dataset, output_column_names: Union[
     elif isinstance(output_column_names, str):
         pass
     else:
-        raise NotImplementedError(f"Unexpected type {type(output_column_names)} of the output column names.")
+        raise NotImplementedError(
+            f"Unexpected type {type(output_column_names)} of the output column names."
+        )
     return dataset
+
 
 def load_data(
     data_config: DictConfig,
@@ -100,8 +109,7 @@ def load_data(
         fetch_kwargs=dict(data_config.fetch_kwargs, cache_dir=cache_dir),
     )
     dataset = _preprocess_multicolumn_labels(
-        dataset=dataset,
-        output_column_names=data_config.output_column_name
+        dataset=dataset, output_column_names=data_config.output_column_name
     )
 
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)

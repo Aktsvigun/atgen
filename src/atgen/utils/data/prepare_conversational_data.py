@@ -14,8 +14,10 @@ def prepare_conversational_data(
     model_name: str = "kek",
 ) -> Dataset:
     input_column_name = data_config.input_column_name
-    output_column_name = get_output_column_name(output_column_name=data_config.output_column_name, purpose=split)
-    
+    output_column_name = get_output_column_name(
+        output_column_name=data_config.output_column_name, purpose=split
+    )
+
     if not few_shot_examples:
         few_shot_messages = []
     else:
@@ -28,7 +30,7 @@ def prepare_conversational_data(
                     ]
                     for (fs_input, fs_output) in zip(
                         few_shot_examples[input_column_name],
-                        few_shot_examples[output_column_name]
+                        few_shot_examples[output_column_name],
                     )
                 ]
             )
