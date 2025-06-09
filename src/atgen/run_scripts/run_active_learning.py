@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Union
 import logging
 from atgen.utils.main_decorator import main_decorator
-from atgen.utils.constants import DEFAULT_CONFIG_NAME
+from atgen.utils.constants import (
+    DEFAULT_CONFIG_NAME,
+    UNLABELED_DATA_SPLIT_DEFAULT_NAME,
+    TEST_DATA_SPLIT_DEFAULT_NAME,
+    OUTPUT_FIELD_PURPOSE_TRAIN,
+    OUTPUT_FIELD_PURPOSE_TEST,
+)
 
 log = logging.getLogger()
 
@@ -20,9 +26,12 @@ def run_active_learning(config, workdir: Union[str, Path]):
     from datasets import concatenate_datasets
 
     from atgen.metrics.compute_metrics import compute_metrics
-    from atgen.utils.data.load_data import load_data
-    from atgen.utils.data.prepare_conversational_data import prepare_conversational_data
-    from atgen.utils.data.maybe_get_few_shot_examples import maybe_get_few_shot_examples
+    from atgen.utils.data import (
+        load_data,
+        prepare_conversational_data,
+        maybe_get_few_shot_examples,
+        get_output_column_name,
+    )
     from atgen.utils.load_model_tokenizer import load_model_tokenizer
     from atgen.utils.prepare_model_for_training import prepare_model_for_training
     from atgen.utils.training_utils import get_trainer
@@ -43,8 +52,13 @@ def run_active_learning(config, workdir: Union[str, Path]):
     seed = config.seed
     cache_dir = config.cache_dir
     input_column_name = config.data.input_column_name
-    output_column_name = config.data.output_column_name
     dev_split_size = config.training.dev_split_size
+    output_column_name_train = get_output_column_name(
+        config.data.output_column_name, purpose=OUTPUT_FIELD_PURPOSE_TRAIN
+    )
+    output_column_name_test = get_output_column_name(
+        config.data.output_column_name, purpose=OUTPUT_FIELD_PURPOSE_TEST
+    )
 
     model_name = config.model.checkpoint
 
@@ -89,14 +103,14 @@ Prompt:\n{config.data.system_prompt}
     log.info("Loading data.")
     unlabeled_data = load_data(
         data_config=config.data,
-        split=config.data.unlabeled_data_split_name,
+        split=UNLABELED_DATA_SPLIT_DEFAULT_NAME,
         cache_dir=config.cache_dir,
         seed=seed,
     )
     if has_test:
         test_data = load_data(
             data_config=config.data,
-            split=config.data.test_split_name,
+            split=TEST_DATA_SPLIT_DEFAULT_NAME,
             cache_dir=config.cache_dir,
             seed=seed,
         )
@@ -124,7 +138,7 @@ Prompt:\n{config.data.system_prompt}
     # TODO: unsure whether need to log here since may be confusing for a human labeller
     labeller: BaseLabeler = get_labeller(
         config.labeller,
-        output_column_name,
+        output_column_name=output_column_name_train,
         cache_dir=cache_dir,
         budget=budget,
         workdir=workdir,  # if labeller is a human
@@ -153,7 +167,7 @@ Prompt:\n{config.data.system_prompt}
             query_ids = al_strategy(
                 model=model,
                 tokenizer=tokenizer,
-                unlabeled_pool=unlabeled_data.remove_columns(output_column_name),
+                unlabeled_pool=unlabeled_data.remove_columns(output_column_name_train),
                 labeled_pool=None,
                 num_to_label=al_query_size,
                 batch_size=config.inference.batch_size,
@@ -217,7 +231,7 @@ Prompt:\n{config.data.system_prompt}
 
             metrics = compute_metrics(
                 generated_texts=generations,
-                reference_texts=test_data[output_column_name],
+                reference_texts=test_data[output_column_name_test],
                 original_texts=test_data[input_column_name],
                 config=config.evaluation,
                 cache_dir=cache_dir,
@@ -328,7 +342,7 @@ Prompt:\n{config.data.system_prompt}
 
             metrics = compute_metrics(
                 generated_texts=generations,
-                reference_texts=test_data[output_column_name],
+                reference_texts=test_data[output_column_name_test],
                 original_texts=test_data[input_column_name],
                 config=config.evaluation,
                 cache_dir=cache_dir,
@@ -360,7 +374,7 @@ Prompt:\n{config.data.system_prompt}
             query_ids = al_strategy(
                 model=model,
                 tokenizer=tokenizer,
-                unlabeled_pool=unlabeled_data.remove_columns(output_column_name),
+                unlabeled_pool=unlabeled_data.remove_columns(output_column_name_train),
                 labeled_pool=labeled_data,
                 num_to_label=al_query_size,
                 batch_size=config.inference.batch_size,
