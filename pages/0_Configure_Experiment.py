@@ -16,7 +16,7 @@ from hydra.core.global_hydra import GlobalHydra
 
 from pathlib import Path
 from atgen.run_scripts import run_active_learning
-from atgen.metrics.supported_models_and_metrics import (
+from atgen.metrics.deepeval_supported_models_and_metrics import (
     get_available_metrics,
     get_available_models,
 )

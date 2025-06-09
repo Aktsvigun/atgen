@@ -2,7 +2,7 @@ from math import ceil
 import os
 import sys
 from openai import OpenAI, AsyncOpenAI
-from typing import List, Dict
+from typing import Union
 from urllib.request import urlretrieve
 import logging
 from pathlib import Path
@@ -111,19 +111,20 @@ def smoothing_function(p_n, references, hypothesis, hyp_len):
     return smoothed_p_n
 
 
-def pair_bleu(references, prediction):
+def pair_bleu(references: list[str] | str, prediction: str):
     """
     Compute the bleu score between two given texts.
     A smoothing function is used to avoid zero scores when
     there are no common higher order n-grams between the
     texts.
     """
-    if not isinstance(references, list):
-        references = [references]
-    tok_ref = [word_tokenize(ref) for ref in references]
-    tok_pred = word_tokenize(prediction)
+    if isinstance(references, str):
+        tok_ref = [[word_tokenize(references)]]
+    else:
+        tok_ref = [[word_tokenize(ref) for ref in references]]
+    tok_pred = [word_tokenize(prediction)]
     try:
-        return corpus_bleu(tok_ref, [tok_pred], smoothing_function=smoothing_function)
+        return corpus_bleu(tok_ref, tok_pred, smoothing_function=smoothing_function)
     except (KeyError, ZeroDivisionError):
         return 0.0
 
@@ -165,107 +166,6 @@ def calculate_bart_score(
     if aggregate:
         scores = {key: np.mean(value) for key, value in scores.items()}
     return scores
-
-
-def calculate_summac_score(
-    predictions: List[str],
-    texts: List[str],
-    labels: List[str] = None,
-    aggregate: bool = True,
-) -> Dict[str, np.ndarray]:
-    scorer = SummaCZS(granularity="sentence", model_name="vitc")
-    preds_score = scorer.score(texts, predictions)["scores"]
-    if labels is not None:
-        labels_score = scorer.score(texts, labels)["scores"]
-        rel_score = np.array(preds_score) / np.array(labels_score)
-    if aggregate:
-        preds_score = np.mean(preds_score)
-        if labels is not None:
-            rel_score = np.mean(rel_score)
-    if labels is not None:
-        return {"SummaC-tp": preds_score, "SummaC-rel": rel_score}
-    return {"SummaC-tp": preds_score}
-
-
-def calculate_cola_model_predictions(
-    texts,
-    checkpoint="Aktsvigun/electra-large-cola",
-    batch_size=64,
-    device="cuda",
-    return_sent_data: bool = False,
-    aggregate: bool = True,
-    cache_dir: str = "cache",
-):
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "Aktsvigun/electra-large-cola"
-    ).to(device)
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-
-    text_sentences = [nltk.sent_tokenize(text) for text in texts]
-    len_maps = np.cumsum([len(x) for x in text_sentences])
-    sentences = [sent for text in text_sentences for sent in text]
-
-    def tokenize_fn(instance):
-        return tokenizer(instance["text"], truncation=True)
-
-    tokenized_data = Dataset.from_dict({"text": sentences}).map(
-        tokenize_fn, remove_columns=["text"], batched=True
-    )
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    dataloader = DataLoader(
-        tokenized_data, batch_size=batch_size, shuffle=False, collate_fn=data_collator
-    )
-
-    sent_probas = torch.empty(len(sentences), dtype=torch.float32, device=device)
-    probas = torch.empty(len(texts), dtype=torch.float32, device=device)
-    start = 0
-    end = batch_size
-    with torch.no_grad():
-        for i, batch in enumerate(dataloader):
-            batch_pred = model(**{k: v.cuda() for k, v in batch.items()})
-            batch_probas = 1 / (1 + (-batch_pred.logits[:, 1]).exp())
-            sent_probas[start:end].copy_(batch_probas)
-            start = end
-            end += batch_size
-
-    for i, end_idx in enumerate(len_maps):
-        start_idx = len_maps[i - 1] if i != 0 else 0
-        probas[i].copy_(sent_probas[start_idx:end_idx].mean())
-
-    if aggregate:
-        return probas.mean().item()
-    if return_sent_data:
-        return (
-            probas.cpu().detach().numpy(),
-            sent_probas.cpu().detach().numpy(),
-            sentences,
-        )
-    return probas.cpu().detach().numpy()
-
-
-def calculate_infolm_score(predictions, references, batch_size=4):
-    from torchmetrics.text.infolm import InfoLM
-
-    assert len(predictions) == len(references), "Lengths must coincide!"
-    infolm_fr = InfoLM(measure_to_use="fisher_rao")
-    infolm_ab = InfoLM(measure_to_use="ab", alpha=1.0, beta=1.0)
-
-    infolm_fr_scores, infolm_ab_scores = [], []
-    idf_ref, idf_hyps = infolm_fr.prepare_idfs(references, predictions)
-
-    num_batches = ceil(len(predictions) / batch_size)
-    for i in range(num_batches):
-        batch_preds = predictions[i * batch_size : (i + 1) * batch_size]
-        batch_refs = references[i * batch_size : (i + 1) * batch_size]
-
-        infolm_fr_scores += infolm_fr.evaluate_batch(
-            batch_preds, batch_refs, idf_ref=idf_ref, idf_hyps=idf_hyps
-        )["fisher_rao"]
-        infolm_ab_scores = infolm_ab.evaluate_batch(
-            batch_preds, batch_refs, idf_ref=idf_ref, idf_hyps=idf_hyps
-        )["ab"]
-
-    return infolm_fr_scores, infolm_ab_scores
 
 
 def calculate_abstractiveness_scores(
@@ -350,7 +250,7 @@ class SentBert:
         self.device = device
 
     def __call__(
-        self, source_texts: List[str], ref_texts: List[str], batch_size: int = 32
+        self, source_texts: list[str], ref_texts: list[str], batch_size: int = 32
     ) -> np.ndarray:
         assert len(source_texts) == len(ref_texts)
         # Make batch_size an even number
@@ -410,9 +310,9 @@ class SentBert:
 
 
 def calculate_alignscore(
-    predictions,
-    references,
-    original_texts,
+    predictions: list[str],
+    references: Union[list[str], list[list[str]]],
+    original_texts: list[str],
     batch_size: int = 32,
     device: str = "cuda",
     cache_dir: str = "cache",
@@ -441,7 +341,13 @@ def calculate_alignscore(
     references = [text if text else " " for text in references]
 
     scores_ref = scorer.score(contexts=original_texts, claims=predictions)
-    scores_baseline = scorer.score(contexts=original_texts, claims=references)
+    if isinstance(references[0], list):
+        scores_baseline = []
+        for orig_text, refs in zip(original_texts, references):
+            inst_baseline_scores = scorer.score(contexts=[orig_text] * len(refs), claims=refs)
+            scores_baseline.append(max(inst_baseline_scores))
+    else:
+        scores_baseline = scorer.score(contexts=original_texts, claims=references)
     scores_rel = np.array(scores_ref) / np.array(scores_baseline)
     return {"alignscore": scores_ref, "alignscore_rel": scores_rel}
 
@@ -554,10 +460,10 @@ def calculate_deepeval_metrics(
     Calculate DeepEval metrics using EvaluationLLM.
 
     Args:
-        predictions: List of generated texts
-        references: List of reference texts
-        original_texts: List of source texts
-        metrics_to_calculate: List of metrics to calculate. Options:
+        predictions: list of generated texts
+        references: list of reference texts
+        original_texts: list of source texts
+        metrics_to_calculate: list of metrics to calculate. Options:
             ["deepeval_answer_relevance", "deepeval_faithfulness", "deepeval_summarization", "deepeval_prompt_alignment"]
         api_key: Evaluation API key
         base_url: Evaluation API base URL
@@ -570,7 +476,7 @@ def calculate_deepeval_metrics(
         truths_extraction_limit: Maximum number of factual truths to extract (default: None)
 
     Returns:
-        Dictionary with metric scores
+        dictionary with metric scores
     """
 
     if not metrics_to_calculate:

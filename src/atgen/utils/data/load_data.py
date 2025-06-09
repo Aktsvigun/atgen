@@ -4,6 +4,8 @@ from typing import Union
 from datasets import load_dataset, load_from_disk, Dataset, DatasetDict
 from omegaconf import DictConfig, ListConfig
 
+from .get_output_column_name import get_output_column_name
+
 
 def _fetch_dataset(
     dataset_name_or_path: Union[str, list[str]],
@@ -57,6 +59,24 @@ def _take_subset(dataset_subset: Dataset, size: int, seed: int) -> Dataset:
     )
     return dataset_subset
 
+def _preprocess_multicolumn_labels(dataset: Dataset, output_column_names: Union[DictConfig, ListConfig, dict[str, Union[str, list[str]]], list[str], str]) -> Dataset:
+    if isinstance(output_column_names, (list, ListConfig)):
+        new_column_name = get_output_column_name(output_column_names)
+        values = []
+        for inst in dataset:
+            for col_name in output_column_names:
+                inst = inst[col_name]
+            values.append(inst)
+        dataset = dataset.add_column(new_column_name, values)
+    elif isinstance(output_column_names, (dict, DictConfig)):
+        for _, column_name in output_column_names.items():
+            dataset = _preprocess_multicolumn_labels(dataset, column_name)
+    # Nothing to preprocess in this case
+    elif isinstance(output_column_names, str):
+        pass
+    else:
+        raise NotImplementedError(f"Unexpected type {type(output_column_names)} of the output column names.")
+    return dataset
 
 def load_data(
     data_config: DictConfig,
@@ -75,9 +95,13 @@ def load_data(
             f"Unexpected split {split}; Please specify either `train` or `test`."
         )
     dataset = _fetch_dataset(
-        data_config.dataset,
-        subset_name,
-        dict(data_config.fetch_kwargs, cache_dir=cache_dir),
+        dataset_name_or_path=data_config.dataset,
+        subset_name=subset_name,
+        fetch_kwargs=dict(data_config.fetch_kwargs, cache_dir=cache_dir),
+    )
+    dataset = _preprocess_multicolumn_labels(
+        dataset=dataset,
+        output_column_names=data_config.output_column_name
     )
 
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)

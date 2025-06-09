@@ -1,5 +1,5 @@
 from time import time
-from typing import List, Dict
+from typing import Dict, Union
 import logging
 from omegaconf import DictConfig
 
@@ -15,7 +15,7 @@ from .metrics import (
     is_bart_score_available,
     is_alignscore_available,
 )
-from .supported_models_and_metrics import API_MODELS, DEEPEVAL_METRICS
+from .deepeval_supported_models_and_metrics import API_MODELS, DEEPEVAL_METRICS
 
 
 log = logging.getLogger()
@@ -90,7 +90,7 @@ def compute_metrics(
     # Avoid division by zero
     src_word_lengths_safe = np.where(src_word_lengths > 0, src_word_lengths, 1)
     result["word_length_src_rel"] = result["word_length_gen"] / src_word_lengths_safe
-    if "bartscore" in config.additional_metrics:
+    if "bartscore" in config.additional_metrics and is_bart_score_available:
         log.info("Calculating BARTScore scores...")
         start_time = time()
         result.update(
@@ -138,24 +138,33 @@ def compute_metrics(
         time_dict["time_rouge"] = time() - start_time
         # Sacrebleu
         start_time = time()
-        sacrebleu_references = (
-            [[ref] for ref in reference_texts]
-            if not isinstance(reference_texts[0], list)
-            else reference_texts
-        )
-        sacrebleu_result = sacrebleu.compute(
-            predictions=generated_texts, references=sacrebleu_references
-        )
-        result["sacrebleu"] = sacrebleu_result.pop("score")
+        if not isinstance(reference_texts[0], list):
+            sacrebleu_references = [[ref] for ref in reference_texts]
+            sacrebleu_result = sacrebleu.compute(
+                predictions=generated_texts, references=sacrebleu_references
+            )
+            result["sacrebleu"] = sacrebleu_result.pop("score")
+        else:
+            sacrebleu_scores = []
+            for pred, ref in zip(generated_texts, reference_texts):
+                sacrebleu_result = sacrebleu.compute(
+                    predictions=[pred], references=[ref]
+                )
+                sacrebleu_scores.append(sacrebleu_result.pop("score"))
+            result["sacrebleu"] = sacrebleu_scores
+        
         time_dict["time_sacrebleu"] = time() - start_time
         # Lengths
-        ref_word_lengths = np.array([len(text.split()) for text in reference_texts])
+        if isinstance(reference_texts[0], list):
+            ref_word_lengths = np.array([np.mean([len(text.split()) for text in ref]) for ref in reference_texts])
+        else:
+            ref_word_lengths = np.array([len(ref.split()) for ref in reference_texts])
         # Avoid division by zero
         ref_word_lengths_safe = np.where(ref_word_lengths > 0, ref_word_lengths, 1)
         result["word_length_rel"] = result["word_length_gen"] / ref_word_lengths_safe
 
         # AlignScore
-        if "alignscore" in config.additional_metrics:
+        if "alignscore" in config.additional_metrics and is_alignscore_available:
             log.info("Calculating AlignScore scores...")
             start_time = time()
             alignscores = calculate_alignscore(
@@ -226,6 +235,5 @@ def compute_metrics(
         and not "_reason" in key.lower()
         and isinstance(value, (int, float))  # Ensure we only keep numerical metrics
     }
-    result.update(time_dict)
 
     return result
