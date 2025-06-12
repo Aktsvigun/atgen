@@ -8,7 +8,7 @@ from datasets import Dataset
 from omegaconf import DictConfig
 
 from torch.utils.data import DataLoader
-from torch import bfloat16, float16, cuda, no_grad, LongTensor
+from torch import bfloat16, cuda
 from tqdm import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from vllm import LLM
@@ -21,11 +21,11 @@ from .constants import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     MESSAGES_COLUMN_NAME,
-    REASONING_END_TOKEN,
 )
 
 from .training_utils import _get_data_collator
 from .find_response_token_ids_in_text import find_response_token_ids_in_text
+from .post_process_generations import post_process_generations
 
 
 log = logging.getLogger()
@@ -101,11 +101,11 @@ def generate_vllm(
         batch_generations = [x.outputs[0].text for x in out]
         generations += batch_generations
 
-    # Remove reasoning tokens from DeepSeek-R1
-    if "deepseek-r1" in llm_runner.llm_engine.model_config.model:
-        for i, generation in enumerate(generations):
-            generations[i] = _remove_thinking_part(generation)
-
+    generations = post_process_generations(
+        generations=generations,
+        data_config=data_config,
+        model_name=llm_runner.llm_engine.model_config.model
+    )
     if delete_vllm_after_inference:
         del llm_runner
         gc.collect()
@@ -247,31 +247,35 @@ def generate_transformers(
         FastLanguageModel.for_inference(model)
 
     generations = []
-    with no_grad():
-        for batch in tqdm(dataloader):
-            try:
-                out = model.generate(
-                    batch["input_ids"].to(model.device),
-                    attention_mask=batch["attention_mask"].to(model.device),
-                    max_new_tokens=inference_config.max_new_tokens,
-                    temperature=inference_config.get(
-                        "temperature", DEFAULT_TEMPERATURE
-                    ),
-                    top_p=inference_config.get("top_p", DEFAULT_TOP_P),
-                    return_dict_in_generate=True,
-                    output_scores=True,
+    for batch in tqdm(dataloader):
+        try:
+            out = model.generate(
+                batch["input_ids"].to(model.device),
+                attention_mask=batch["attention_mask"].to(model.device),
+                max_new_tokens=inference_config.max_new_tokens,
+                temperature=inference_config.get(
+                    "temperature", DEFAULT_TEMPERATURE
+                ),
+                top_p=inference_config.get("top_p", DEFAULT_TOP_P),
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+            outputs_only = []
+            for output in out.sequences:
+                seq_only = find_response_token_ids_in_text(
+                    output.tolist(), data_collator.response_token_ids
                 )
-                outputs_only = []
-                for output in out.sequences:
-                    seq_only = find_response_token_ids_in_text(
-                        output.tolist(), data_collator.response_token_ids
-                    )
-                    outputs_only.append(tokenizer.decode(seq_only, True).strip())
-                generations += outputs_only
-            except Exception as e:
-                print(f"Error in model.generate: {e}")
-                # Add empty strings for this batch to maintain alignment with input data
-                generations += [""] * len(batch["input_ids"])
+                outputs_only.append(tokenizer.decode(seq_only, True).strip())
+            generations += outputs_only
+        except Exception as e:
+            print(f"Error in model.generate: {e}")
+            # Add empty strings for this batch to maintain alignment with input data
+            generations += [""] * len(batch["input_ids"])
+    generations = post_process_generations(
+        generations=generations,
+        data_config=data_config,
+        model_name=model.name_or_path
+    )
     return generations
 
 
@@ -331,7 +335,3 @@ def tokenize_conversational_example(
         input_ids = tokenizer.apply_chat_template(example["messages"], add_generation_prompt=True)
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-
-def _remove_thinking_part(text: str) -> str:
-    return REASONING_END_TOKEN.join(text.split(REASONING_END_TOKEN)[1:]).strip()
