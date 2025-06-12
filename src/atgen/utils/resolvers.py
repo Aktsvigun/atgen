@@ -2,10 +2,9 @@
 Custom Hydra resolvers for configuration calculations
 """
 
-from typing import Any
+from typing import Union
 
-from hydra.core.config_store import ConfigStore
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig, ListConfig
 
 
 def multiply_with_few_shot(input_max_length: int, few_shot_count: int) -> int:
@@ -28,13 +27,13 @@ def to_string(model_name: str):
     """
     return model_name.replace("/", "__")
 
-
 def register_resolvers() -> None:
     """Register all custom resolvers with OmegaConf"""
     # Register resolvers only if they are not already registered
     resolvers_to_register = {
         "multiply_with_few_shot": multiply_with_few_shot,
         "to_string": to_string,
+        "get_output_column_name_for_phase": get_output_column_name_for_phase,
     }
 
     for name, resolver_fn in resolvers_to_register.items():

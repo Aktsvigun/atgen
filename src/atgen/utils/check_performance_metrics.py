@@ -4,7 +4,7 @@ log = logging.getLogger()
 
 
 def check_performance_against_requirements(
-    metrics, required_performance_dict, metrics_availability_checked, available_metrics
+    metrics, required_performance_dict, is_metrics_availability_checked, available_metrics
 ):
     """
     Check if the computed metrics meet the required performance thresholds.
@@ -12,17 +12,17 @@ def check_performance_against_requirements(
     Args:
         metrics (dict): The computed metrics from the current evaluation
         required_performance_dict (dict): Dictionary of required metric thresholds
-        metrics_availability_checked (bool): Whether metrics availability has been checked
+        is_metrics_availability_checked (bool): Whether metrics availability has been checked
         available_metrics (dict): Previously identified available metrics and their thresholds
 
     Returns:
-        tuple: (is_performance_reached, metrics_availability_checked, available_metrics)
+        tuple: (is_performance_reached, is_metrics_availability_checked, available_metrics)
     """
     is_performance_reached = False
 
     if required_performance_dict is not None:
         # Only check which metrics are available on the first iteration with valid metrics
-        if not metrics_availability_checked:
+        if not is_metrics_availability_checked:
             # Determine which required metrics are available in computed metrics
             available_metrics = {
                 metric: threshold
@@ -44,7 +44,7 @@ def check_performance_against_requirements(
                     "None of the required metrics are available. Cannot evaluate required performance."
                 )
 
-            metrics_availability_checked = True
+            is_metrics_availability_checked = True
 
         # Check if required performance is reached based on available metrics
         if available_metrics:
@@ -75,4 +75,4 @@ def check_performance_against_requirements(
         else:
             is_performance_reached = False
 
-    return is_performance_reached, metrics_availability_checked, available_metrics
+    return is_performance_reached, is_metrics_availability_checked, available_metrics

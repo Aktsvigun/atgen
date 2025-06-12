@@ -11,3 +11,4 @@ fetch_kwargs: {}
 is_in_conversational_format: false
 system_prompt: "Please answer the question very laconically:\n\n"
 assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false

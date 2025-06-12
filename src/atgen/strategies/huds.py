@@ -13,13 +13,13 @@ from transformers import (
     PreTrainedTokenizerBase,
 )
 
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 from ..utils.get_embeddings import get_embeddings
 from ..utils.constants import MESSAGES_COLUMN_NAME
 from ..utils.data.prepare_conversational_data import prepare_conversational_data
 
 
-class HudsStrategy(Strategy):
+class HudsStrategy(BaseStrategy):
     def __init__(
         self,
         unlabeled_pool: list[str],

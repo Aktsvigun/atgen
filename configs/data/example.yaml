@@ -14,3 +14,4 @@ train_subset_size: int
 system_prompt: str
 assistant_response_start: str
 is_in_conversational_format: bool
+use_test_benchmark: bool

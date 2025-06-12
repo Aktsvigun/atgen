@@ -1,5 +1,4 @@
 from time import time
-from typing import Dict, Union
 import logging
 from omegaconf import DictConfig
 
@@ -27,7 +26,7 @@ def compute_metrics(
     original_texts,
     config: DictConfig,
     cache_dir: str = "cache",
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Compute various metrics for generated texts.
 
