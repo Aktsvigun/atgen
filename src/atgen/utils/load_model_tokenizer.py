@@ -53,6 +53,7 @@ def load_model_tokenizer(
             trust_remote_code=True,
         )
         tokenizer.model_max_length = model_config.model_max_length
+        tokenizer.padding_side = "left"
     else:
         kwargs = {
             "cache_dir": cache_dir,
@@ -65,8 +66,7 @@ def load_model_tokenizer(
             model_config.checkpoint,
             model_max_length=model_config.model_max_length,
             cache_dir=cache_dir,
-            # TODO: choose automatically
-            # padding_side="left",
+            padding_side="left"
         )
 
     if tokenizer.pad_token is None:
