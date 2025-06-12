@@ -30,6 +30,10 @@ from .post_process_generations import post_process_generations
 
 log = logging.getLogger()
 
+VLLM_FRAMEWORK = "vllm"
+SGLANG_FRAMEWORK = "sglang"
+TRANSFORMERS_FRAMEWORK = "transformers"
+
 
 def generate_vllm(
     inference_config: DictConfig,
@@ -104,21 +108,14 @@ def generate_vllm(
     generations = post_process_generations(
         generations=generations,
         data_config=data_config,
-        model_name=llm_runner.llm_engine.model_config.model
+        model_name=llm_runner.llm_engine.model_config.model,
+        framework=VLLM_FRAMEWORK
     )
     if delete_vllm_after_inference:
         del llm_runner
         gc.collect()
         cuda.empty_cache()
     return generations
-
-
-def generate_sglang() -> list[str]:
-    """
-    Function for generating with the SGLang framework.
-    Requires either model + tokenizer or the path to the saved model and tokenizer.
-    """
-    pass
 
 
 def generate_sglang(
@@ -208,6 +205,12 @@ def generate_sglang(
         batch_generations = [result.outputs["response"] for result in batch_results]
         generations += batch_generations
 
+    generations = post_process_generations(
+        generations=generations,
+        data_config=data_config,
+        model_name=model_path,
+        framework=SGLANG_FRAMEWORK
+    )
     # Clean up
     engine.shutdown()
     return generations
@@ -274,7 +277,8 @@ def generate_transformers(
     generations = post_process_generations(
         generations=generations,
         data_config=data_config,
-        model_name=model.name_or_path
+        model_name=model.name_or_path,
+        framework=TRANSFORMERS_FRAMEWORK
     )
     return generations
 
@@ -290,7 +294,7 @@ def generate(
     **kwargs,
 ) -> list[str]:
     framework = inference_config.framework
-    if framework == "vllm":
+    if framework == VLLM_FRAMEWORK:
         return generate_vllm(
             inference_config=inference_config,
             data=data,
@@ -300,7 +304,7 @@ def generate(
             data_config=data_config,
             **kwargs,
         )
-    elif framework == "transformers":
+    elif framework == TRANSFORMERS_FRAMEWORK:
         return generate_transformers(
             inference_config=inference_config,
             data=data,
@@ -311,7 +315,7 @@ def generate(
             model_config=model_config,
             **kwargs,
         )
-    elif framework == "sglang":
+    elif framework == SGLANG_FRAMEWORK:
         return generate_sglang(
             inference_config=inference_config,
             data=data,
