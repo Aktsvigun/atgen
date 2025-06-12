@@ -1,4 +1,4 @@
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 
 from datasets import Dataset
 from transformers import PreTrainedModel
@@ -10,7 +10,7 @@ import torch
 import logging
 
 
-class IDDSStrategy(Strategy):
+class IDDSStrategy(BaseStrategy):
     def __init__(self, seed=None):
         super().__init__()
         self.seed = seed

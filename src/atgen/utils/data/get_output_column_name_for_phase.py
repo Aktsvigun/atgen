@@ -4,7 +4,7 @@ from omegaconf import DictConfig, ListConfig
 from ..constants import OUTPUT_FIELD_PURPOSE_TRAIN
 
 
-def get_output_column_name(
+def get_output_column_name_for_phase(
     output_column_name: Union[
         DictConfig, ListConfig, dict[str, Union[str, list[str]]], list[str], str
     ],

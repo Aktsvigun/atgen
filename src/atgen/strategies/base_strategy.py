@@ -8,7 +8,7 @@ from transformers import (
 )
 
 
-class Strategy(ABC):
+class BaseStrategy(ABC):
     def __init__(self, subsample_size: int | float = -1):
         self.subsample_size = subsample_size
 

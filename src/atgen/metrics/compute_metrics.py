@@ -1,9 +1,12 @@
 from time import time
 <<<<<<< HEAD
+<<<<<<< HEAD
 from typing import List, Dict, Union, Optional
 =======
 from typing import Dict, Union
 >>>>>>> eaad08f (fixed version for multi-ref datasets)
+=======
+>>>>>>> 7fd04b7 (bugs fixed)
 import logging
 import numpy as np
 from omegaconf import DictConfig
@@ -30,6 +33,7 @@ log = logging.getLogger()
 
 
 def compute_metrics(
+<<<<<<< HEAD
     generated_texts: List[str],
     reference_texts: Optional[List[Union[str, List[str]]]] = None,
     original_texts: Optional[List[str]] = None,
@@ -38,6 +42,14 @@ def compute_metrics(
     tokenizer=None,
     cache_dir: Optional[str] = None,
 ) -> Dict[str, float]:
+=======
+    generated_texts,
+    reference_texts,
+    original_texts,
+    config: DictConfig,
+    cache_dir: str = "cache",
+) -> dict[str, float]:
+>>>>>>> 7fd04b7 (bugs fixed)
     """
     Compute various metrics for generated texts using the new architecture.
     

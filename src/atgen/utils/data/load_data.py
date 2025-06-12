@@ -4,7 +4,8 @@ from typing import Union
 from datasets import load_dataset, load_from_disk, Dataset, DatasetDict
 from omegaconf import DictConfig, ListConfig
 
-from .get_output_column_name import get_output_column_name
+from .get_output_column_name_for_phase import get_output_column_name_for_phase
+from ..constants import OUTPUT_FIELD_PURPOSE_TRAIN, OUTPUT_FIELD_PURPOSE_TEST
 
 
 def _fetch_dataset(
@@ -60,14 +61,23 @@ def _take_subset(dataset_subset: Dataset, size: int, seed: int) -> Dataset:
     return dataset_subset
 
 
-def _preprocess_multicolumn_labels(
+def _preprocess_multicolumn_labels_if_needed(
     dataset: Dataset,
     output_column_names: Union[
         DictConfig, ListConfig, dict[str, Union[str, list[str]]], list[str], str
     ],
+    data_config: DictConfig,
+    phase: str = OUTPUT_FIELD_PURPOSE_TRAIN,
 ) -> Dataset:
     if isinstance(output_column_names, (list, ListConfig)):
-        new_column_name = get_output_column_name(output_column_names)
+        # Get preprocessed column name
+        if phase == OUTPUT_FIELD_PURPOSE_TRAIN:
+            new_column_name = data_config.train_output_column_name
+        elif phase == OUTPUT_FIELD_PURPOSE_TEST:
+            new_column_name = data_config.test_output_column_name
+        else:
+            raise NotImplementedError(f"Unexpected phase {phase}")
+        # Get preprocessed column values
         values = []
         for inst in dataset:
             for col_name in output_column_names:
@@ -75,8 +85,10 @@ def _preprocess_multicolumn_labels(
             values.append(inst)
         dataset = dataset.add_column(new_column_name, values)
     elif isinstance(output_column_names, (dict, DictConfig)):
-        for _, column_name in output_column_names.items():
-            dataset = _preprocess_multicolumn_labels(dataset, column_name)
+        for phase, column_name in output_column_names.items():
+            dataset = _preprocess_multicolumn_labels_if_needed(
+                dataset, column_name, data_config, phase
+            )
     # Nothing to preprocess in this case
     elif isinstance(output_column_names, str):
         pass
@@ -108,10 +120,12 @@ def load_data(
         subset_name=subset_name,
         fetch_kwargs=dict(data_config.fetch_kwargs, cache_dir=cache_dir),
     )
-    dataset = _preprocess_multicolumn_labels(
-        dataset=dataset, output_column_names=data_config.output_column_name
+    dataset = _preprocess_multicolumn_labels_if_needed(
+        dataset=dataset,
+        output_column_names=data_config.output_column_name,
+        data_config=data_config,
+        phase=split,
     )
-
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)
     dataset = _add_id_column(dataset)
     if subset_size is not None:

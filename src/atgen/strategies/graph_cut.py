@@ -5,7 +5,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from submodlib import GraphCutFunction
 
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 from ..utils.get_embeddings import get_embeddings
 
 """
@@ -15,7 +15,7 @@ for parameter disambiguation
 """
 
 
-class GraphCutStrategy(Strategy):
+class GraphCutStrategy(BaseStrategy):
     def __init__(
         self,
         unlabeled_pool: list[str],

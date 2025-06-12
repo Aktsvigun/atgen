@@ -1,11 +1,11 @@
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 
 import numpy as np
 from datasets import Dataset
 from transformers import set_seed, PreTrainedModel
 
 
-class BLEUVarStrategy(Strategy):
+class BLEUVarStrategy(BaseStrategy):
     def __init__(self):
         super().__init__()
 

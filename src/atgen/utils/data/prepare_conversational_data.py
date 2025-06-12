@@ -3,7 +3,7 @@ from datasets import Dataset
 from omegaconf import DictConfig
 
 from .get_preprocess_function import get_preprocess_function
-from .get_output_column_name import get_output_column_name
+from .get_output_column_name_for_phase import get_output_column_name_for_phase
 
 
 def prepare_conversational_data(
@@ -14,7 +14,7 @@ def prepare_conversational_data(
     model_name: str = "kek",
 ) -> Dataset:
     input_column_name = data_config.input_column_name
-    output_column_name = get_output_column_name(
+    output_column_name = get_output_column_name_for_phase(
         output_column_name=data_config.output_column_name, purpose=split
     )
 
@@ -35,15 +35,6 @@ def prepare_conversational_data(
         output_column_name=output_column_name,
         assistant_response_start=data_config.assistant_response_start,
     )
-    try:
-        preprocess_fn(dataset[0])
-    except Exception as e:
-        print(e)
-        import pdb
-        import sys
-
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        pdb.post_mortem(exc_traceback)
     dataset = dataset.map(
         preprocess_fn,
         batched=False,

@@ -17,13 +17,13 @@ from transformers import (
     PreTrainedTokenizerBase,
 )
 
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 
 
 log = logging.getLogger()
 
 
-class TeDelfyStrategy(Strategy):
+class TeDelfyStrategy(BaseStrategy):
     def __init__(self, subsample_size: int = -1, inference_config: DictConfig = None):
         super().__init__(subsample_size)
         self.random_init = True

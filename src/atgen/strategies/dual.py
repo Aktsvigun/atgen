@@ -1,7 +1,7 @@
 from datasets import Dataset
 from transformers import PreTrainedModel
 
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 from .idds import idds_sampling
 from .bleuvar import bleuvar
 from .random_strategy import random_strategy
@@ -11,7 +11,7 @@ https://arxiv.org/pdf/2503.00867v1
 """
 
 
-class DualStrategy(Strategy):
+class DualStrategy(BaseStrategy):
     def __init__(self, seed=None):
         super().__init__()
         self.seed = seed
