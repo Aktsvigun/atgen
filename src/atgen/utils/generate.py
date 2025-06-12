@@ -226,7 +226,7 @@ def generate_transformers(
         data = data.map(
             tokenize_conversational_example,
             batched=False,
-            fn_kwargs={"tokenizer": tokenizer},
+            fn_kwargs={"tokenizer": tokenizer, "data_config": data_config},
         )
 
     data_collator = _get_data_collator(
@@ -323,9 +323,12 @@ def generate(
 
 
 def tokenize_conversational_example(
-    example: dict[str, Any], tokenizer: PreTrainedTokenizer
+    example: dict[str, Any], tokenizer: PreTrainedTokenizer, data_config: DictConfig
 ) -> dict[str, list[int]]:
-    input_ids = tokenizer.apply_chat_template(example["messages"], continue_final_message=True)
+    if data_config.assistant_response_start:
+        input_ids = tokenizer.apply_chat_template(example["messages"], continue_final_message=True)
+    else:
+        input_ids = tokenizer.apply_chat_template(example["messages"], add_generation_prompt=True)
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}
 
