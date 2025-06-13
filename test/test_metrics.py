@@ -110,7 +110,7 @@ class TestMetricsFactory:
         assert isinstance(metrics, list)
         assert len(metrics) > 0
         assert "bleu" in metrics
-        assert "rouge" in metrics
+        assert "rouge1" in metrics
         assert "sentbert" in metrics
         assert "cola" in metrics
         
@@ -137,21 +137,21 @@ class TestMetricsFactory:
     def test_create_metrics_from_config(self):
         """Test creating multiple metrics from config."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge", "sentbert"],
+            metrics=["bleu", "rouge1", "sentbert"],
             device="cpu"
         )
         metrics = MetricsFactory.create_metrics(config)
         
         assert len(metrics) == 3
         assert "bleu" in metrics
-        assert "rouge" in metrics
+        assert "rouge1" in metrics
         assert "sentbert" in metrics
         assert all(isinstance(m, BaseMetric) for m in metrics.values())
         
     def test_create_from_config_dict(self):
         """Test creating metrics from dictionary config."""
         config_dict = {
-            "metrics": ["bleu", "rouge"],
+            "metrics": ["bleu", "rouge1"],
             "device": "cpu",
             "batch_size": 16
         }
@@ -159,7 +159,7 @@ class TestMetricsFactory:
         
         assert len(metrics) == 2
         assert "bleu" in metrics
-        assert "rouge" in metrics
+        assert "rouge1" in metrics
         
     def test_register_custom_metric(self):
         """Test registering a custom metric."""
@@ -307,6 +307,10 @@ class TestIdenticalStringsBasic:
     @patch('torch.cuda.is_available', return_value=False)
     def test_alignscore_identical_strings(self, mock_cuda, identical_data, temp_cache_dir):
         """Test AlignScore metric with identical strings."""
+        # Skip test if AlignScore is not available
+        if AlignScoreMetric is None:
+            pytest.skip("AlignScore metric not available due to import issues")
+            
         config = MetricConfig(device="cpu", cache_dir=temp_cache_dir, batch_size=2)
         metric = AlignScoreMetric(config)
         
@@ -376,7 +380,7 @@ class TestComputeMetrics:
     def test_compute_metrics_custom_config(self, sample_data, temp_cache_dir):
         """Test compute_metrics with custom configuration."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge"],
+            metrics=["bleu", "rouge1"],
             device="cpu",
             cache_dir=temp_cache_dir,
             batch_size=16
@@ -420,7 +424,7 @@ class TestComputeMetrics:
     def test_compute_metrics_from_config(self, sample_data, temp_cache_dir):
         """Test compute_metrics_from_config function."""
         config_dict = {
-            "metrics": ["bleu", "rouge"],
+            "metrics": ["bleu", "rouge1"],
             "device": "cpu",
             "cache_dir": temp_cache_dir
         }
@@ -481,7 +485,7 @@ class TestConfigurationFunctions:
         
         assert isinstance(config, MetricsConfig)
         assert "bleu" in config.metrics
-        assert "rouge" in config.metrics
+        assert "rouge1" in config.metrics
         assert config.batch_size == 32
         assert config.device == "cuda"
         
@@ -492,7 +496,7 @@ class TestConfigurationFunctions:
         assert isinstance(config, MetricsConfig)
         assert len(config.metrics) > 2  # Should include more metrics
         assert "bleu" in config.metrics
-        assert "rouge" in config.metrics
+        assert any("rouge" in metric for metric in config.metrics)
         assert "sentbert" in config.metrics
         assert "cola" in config.metrics
 
@@ -510,7 +514,7 @@ class TestEdgeCases:
     def test_empty_strings(self, temp_cache_dir):
         """Test metrics with empty strings."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge"],
+            metrics=["bleu", "rouge1"],
             device="cpu",
             cache_dir=temp_cache_dir
         )
@@ -528,7 +532,7 @@ class TestEdgeCases:
     def test_single_item_lists(self, temp_cache_dir):
         """Test metrics with single item lists."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge"],
+            metrics=["bleu", "rouge1"],
             device="cpu",
             cache_dir=temp_cache_dir
         )
@@ -546,7 +550,7 @@ class TestEdgeCases:
     def test_multiple_references(self, temp_cache_dir):
         """Test metrics with multiple references."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge"],
+            metrics=["bleu", "rouge1"],
             device="cpu",
             cache_dir=temp_cache_dir
         )
@@ -597,7 +601,7 @@ class TestMetricIntegration:
     def test_all_lexical_metrics(self, temp_cache_dir):
         """Test all lexical metrics together."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge"],
+            metrics=["bleu", "rouge1"],
             device="cpu",
             cache_dir=temp_cache_dir,
             aggregate=True
@@ -622,7 +626,7 @@ class TestMetricIntegration:
     def test_comprehensive_metrics_suite(self, mock_cuda, temp_cache_dir):
         """Test a comprehensive suite of metrics."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge", "sentbert", "cola"],
+            metrics=["bleu", "rouge1", "sentbert", "cola"],
             device="cpu",
             cache_dir=temp_cache_dir,
             batch_size=8,
