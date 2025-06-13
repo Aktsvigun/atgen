@@ -33,7 +33,6 @@ def register_resolvers() -> None:
     resolvers_to_register = {
         "multiply_with_few_shot": multiply_with_few_shot,
         "to_string": to_string,
-        "get_output_column_name_for_phase": get_output_column_name_for_phase,
     }
 
     for name, resolver_fn in resolvers_to_register.items():
