@@ -10,3 +10,4 @@ output_max_length: 21
 fetch_kwargs: {}
 system_prompt: "Generate a headline for the article in lowercase."
 use_test_benchmark: false
+task: 'summarization'

@@ -1,7 +1,6 @@
 dataset: ['ehovy/race', 'all']
 input_column_name: {"article": "article", "question": "question", "options": "options"}
 output_column_name: 'answer'
-is_multi_choice_qa: true
 unlabeled_data_split_name: train
 test_split_name: test
 train_subset_size: null
@@ -25,3 +24,4 @@ user_prompt_template: |
 
 assistant_response_start: ${model.assistant_response_start}
 use_test_benchmark: false
+task: 'multi-choice-qa'

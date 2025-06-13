@@ -52,7 +52,6 @@ def run_active_learning(config, workdir: Union[str, Path]):
 
     seed = config.seed
     cache_dir = config.cache_dir
-    input_column_name = config.data.input_column_name
     dev_split_size = config.training.dev_split_size
     output_column_name_train = config.data.train_output_column_name
     output_column_name_test = config.data.test_output_column_name
@@ -60,7 +59,6 @@ def run_active_learning(config, workdir: Union[str, Path]):
     model_name = config.model.checkpoint
 
     num_al_iterations = config.al.num_iterations
-    al_query_size = config.al.query_size
     required_performance_dict = check_required_performance(
         config.al.required_performance
     )
@@ -83,7 +81,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
         f"""Running Active Learning...
 AL Strategy: {config.al.strategy}
 Num Iterations: {num_al_iterations}
-Query Size: {al_query_size}
+Query Size: {config.al.query_size}
 Dataset: {config.data.dataset if isinstance(config.data.dataset, str) else 'custom'}
 Seed: {seed}
 Model: {model_name}
@@ -111,8 +109,18 @@ Prompt:\n{config.data.system_prompt}
             cache_dir=config.cache_dir,
             seed=seed,
         )
+    # TODO: make better. Current workaround for multi-choice QA.
     if config.data.get("processed_input_column_name", None) is not None:
-        input_column_name = config.data.processed_input_column_name
+        config.data.input_column_name = config.data.processed_input_column_name
+    input_column_name = config.data.input_column_name
+    # After loading data, need to calculate the query size if it is proportional to the dataset size
+    if config.al.init_query_size is None:
+        config.al.init_query_size = int(len(unlabeled_data) * config.al.init_query_size)
+        log.info(f"Setting init query size to {config.al.init_query_size}")
+    if isinstance(config.al.query_size, float):
+        config.al.query_size = int(len(unlabeled_data) * config.al.query_size)
+        log.info(f"Setting query size to {config.al.query_size}")
+    al_query_size = config.al.query_size
 
     log.info("Initial iteration: loading model & tokenizer.")
     model, tokenizer = load_model_tokenizer(
@@ -233,6 +241,7 @@ Prompt:\n{config.data.system_prompt}
                 generated_texts=generations,
                 reference_texts=test_data[output_column_name_test],
                 original_texts=test_data[input_column_name],
+                task=config.data.task,
                 config=config.evaluation,
                 cache_dir=cache_dir,
             )
@@ -298,7 +307,7 @@ Prompt:\n{config.data.system_prompt}
 
         # Set seed for reproducibility
         set_seed(seed)
-        trainer: SFTTrainer = get_trainer(
+        trainer = get_trainer(
             config=config,
             model=model,
             tokenizer=tokenizer,
@@ -344,6 +353,7 @@ Prompt:\n{config.data.system_prompt}
                 generated_texts=generations,
                 reference_texts=test_data[output_column_name_test],
                 original_texts=test_data[input_column_name],
+                task=config.data.task,
                 config=config.evaluation,
                 cache_dir=cache_dir,
             )

@@ -126,8 +126,8 @@ def load_data(
         data_config=data_config,
         phase=split,
     )
-    if data_config.get("is_multi_choice_qa", False):
-        dataset = _preprocess_multi_choice_qa(dataset, data_config)
+    if data_config.task == "multi-choice-qa":
+        dataset = _preprocess_multi_choice_qa(dataset=dataset, data_config=data_config, split=split)
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)
     dataset = _add_id_column(dataset)
     if subset_size is not None:
@@ -135,7 +135,7 @@ def load_data(
 
     return dataset
 
-def _preprocess_multi_choice_qa(dataset: Dataset, data_config: DictConfig) -> Dataset:
+def _preprocess_multi_choice_qa(dataset: Dataset, data_config: DictConfig, split: str) -> Dataset:
     alphabet_titled = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     input_column_names = data_config.input_column_name
     options_column_name = input_column_names["options"]
@@ -152,12 +152,15 @@ def _preprocess_multi_choice_qa(dataset: Dataset, data_config: DictConfig) -> Da
         user_prompt_kwargs["options"] = preprocessed_options
         inst_messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt_template.format(**user_prompt_kwargs)}
+            {"role": "user", "content": user_prompt_template.format(**user_prompt_kwargs)},
         ]
+        if split == "train":
+            inst_messages.append({"role": "assistant", "content": inst["answer"]})
         messages.append(inst_messages)
     if "messages" in dataset.column_names:
         dataset = dataset.remove_columns(["messages"])
     dataset = dataset.add_column("messages", messages)
+    # Can't directly update `processed_input_column_name` because test data is loaded separately
     OmegaConf.update(data_config, "processed_input_column_name", "messages", force_add=True)
     data_config.is_in_conversational_format = True
     return dataset

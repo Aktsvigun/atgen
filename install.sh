@@ -32,6 +32,6 @@ pip install -e .
 
 echo "Downloading NLP packages data..."
 python -m spacy download en_core_web_sm
-python3 -c "import nltk ; nltk.download('punkt'); nltk.download('punkt_tab')"
+python3 -c "import nltk ; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('stopwords')"
 
 echo "Done!"

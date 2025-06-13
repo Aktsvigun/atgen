@@ -13,7 +13,7 @@ def get_output_column_name_for_phase(
     if isinstance(output_column_name, (list, ListConfig)):
         return "_".join(output_column_name)
     elif isinstance(output_column_name, (dict, DictConfig)):
-        return "_".join(output_column_name[purpose])
+        return get_output_column_name_for_phase(output_column_name[purpose])
     elif isinstance(output_column_name, str):
         return output_column_name
     else:

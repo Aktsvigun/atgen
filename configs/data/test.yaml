@@ -14,3 +14,4 @@ train_subset_size: 100
 is_in_conversational_format: false
 assistant_response_start: ${model.assistant_response_start}
 use_test_benchmark: false
+task: 'summarization'
