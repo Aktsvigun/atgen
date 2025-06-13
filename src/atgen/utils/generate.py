@@ -105,7 +105,6 @@ def generate_vllm(
         batch_generations = [x.outputs[0].text for x in out]
         generations += batch_generations
 
-    import pdb; pdb.set_trace()
     generations = post_process_generations(
         generations=generations,
         data_config=data_config,

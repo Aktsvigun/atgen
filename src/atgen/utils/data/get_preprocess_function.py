@@ -90,7 +90,9 @@ def get_preprocess_function(
             elif split == "train":
                 # For training, add the assistant's response
                 if assistant_response_start:
-                    assistant_message = assistant_response_start + instance[output_column_name]
+                    assistant_message = (
+                        assistant_response_start + instance[output_column_name]
+                    )
                 else:
                     assistant_message = instance[output_column_name]
                 messages.append({"role": "assistant", "content": assistant_message})
@@ -131,7 +133,9 @@ def get_preprocess_function(
                 # For training, add the assistant's response
                 if split == "train":
                     if assistant_response_start:
-                        assistant_message = assistant_response_start + instance[output_column_name]
+                        assistant_message = (
+                            assistant_response_start + instance[output_column_name]
+                        )
                     else:
                         assistant_message = instance[output_column_name]
                     messages.append({"role": "assistant", "content": assistant_message})
