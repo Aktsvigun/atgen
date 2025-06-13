@@ -62,6 +62,7 @@ inference:
     temperature: 0.6
     top_p: 0.1
     model: ${model.checkpoint}
+    num_display_generations: 0
 
 evaluation:
     additional_metrics: []

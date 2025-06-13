@@ -111,6 +111,8 @@ Prompt:\n{config.data.system_prompt}
             cache_dir=config.cache_dir,
             seed=seed,
         )
+    if config.data.get("processed_input_column_name", None) is not None:
+        input_column_name = config.data.processed_input_column_name
 
     log.info("Initial iteration: loading model & tokenizer.")
     model, tokenizer = load_model_tokenizer(

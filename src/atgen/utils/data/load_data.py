@@ -2,7 +2,7 @@ import os
 from typing import Union
 
 from datasets import load_dataset, load_from_disk, Dataset, DatasetDict
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from .get_output_column_name_for_phase import get_output_column_name_for_phase
 from ..constants import OUTPUT_FIELD_PURPOSE_TRAIN, OUTPUT_FIELD_PURPOSE_TEST
@@ -126,9 +126,38 @@ def load_data(
         data_config=data_config,
         phase=split,
     )
+    if data_config.get("is_multi_choice_qa", False):
+        dataset = _preprocess_multi_choice_qa(dataset, data_config)
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)
     dataset = _add_id_column(dataset)
     if subset_size is not None:
         dataset = _take_subset(dataset, subset_size, seed)
 
+    return dataset
+
+def _preprocess_multi_choice_qa(dataset: Dataset, data_config: DictConfig) -> Dataset:
+    alphabet_titled = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    input_column_names = data_config.input_column_name
+    options_column_name = input_column_names["options"]
+    user_prompt_template = data_config.user_prompt_template
+    system_prompt = data_config.system_prompt
+    messages = []
+    for inst in dataset:
+        preprocessed_options = ''
+        for option, letter in zip(inst[options_column_name], alphabet_titled):
+            preprocessed_options += f"- {letter}. {option}\n"
+        user_prompt_kwargs = {
+            key: inst[key] for key in input_column_names.keys() if key != options_column_name
+        }
+        user_prompt_kwargs["options"] = preprocessed_options
+        inst_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt_template.format(**user_prompt_kwargs)}
+        ]
+        messages.append(inst_messages)
+    if "messages" in dataset.column_names:
+        dataset = dataset.remove_columns(["messages"])
+    dataset = dataset.add_column("messages", messages)
+    OmegaConf.update(data_config, "processed_input_column_name", "messages", force_add=True)
+    data_config.is_in_conversational_format = True
     return dataset
