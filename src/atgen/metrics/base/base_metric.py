@@ -14,11 +14,8 @@ class MetricConfig:
     checkpoint: Optional[str] = None
     model_name: Optional[str] = None
     
-<<<<<<< HEAD
-    # API-based parameters (for LLM-based metrics)
+    # API configuration parameters  
     provider: Optional[str] = None
-=======
->>>>>>> dabcd83 (added default factory)
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
@@ -50,11 +47,8 @@ class BaseMetric(ABC):
     @abstractmethod
     def calculate(self, predictions, references, original_texts):
         pass
-<<<<<<< HEAD
     
     def is_available(self) -> bool:
         """Check if the metric is available for use."""
         return True
-=======
->>>>>>> dabcd83 (added default factory)
     

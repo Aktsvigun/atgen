@@ -13,11 +13,7 @@ class SentBertMetric(BaseMetric):
         super().__init__(config)
         self.model = None
         self.tokenizer = None
-<<<<<<< HEAD
         self.checkpoint = (config.checkpoint if config and config.checkpoint else 'sentence-transformers/all-mpnet-base-v2')
-=======
-        self.checkpoint = getattr(config, 'checkpoint', 'sentence-transformers/all-mpnet-base-v2') if config else 'sentence-transformers/all-mpnet-base-v2'
->>>>>>> dabcd83 (added default factory)
     
     
     def _initialize_model(self):

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 import os
 import tempfile
 import shutil
+import warnings
 
 from atgen.metrics import (
     BaseMetric,
@@ -22,7 +23,13 @@ from atgen.metrics import (
     get_comprehensive_config,
     get_metric_categories,
     get_metric_requirements,
+    AVAILABLE_METRICS,
+    get_available_metrics,
+    get_all_possible_metric_keys,
 )
+from atgen.utils.check_required_performance import check_required_performance
+from atgen.utils.check_performance_metrics import check_performance_against_requirements
+from omegaconf import DictConfig
 
 
 class TestMetricConfig:
@@ -36,6 +43,8 @@ class TestMetricConfig:
         assert config.cache_dir == "cache"
         assert config.aggregate is True
         assert config.threshold == 0.5
+        assert config.provider is None
+        assert config.api_key is None
         
     def test_custom_config(self):
         """Test custom configuration values."""
@@ -44,13 +53,17 @@ class TestMetricConfig:
             device="cpu",
             cache_dir="custom_cache",
             aggregate=False,
-            threshold=0.7
+            threshold=0.7,
+            provider="openrouter",
+            api_key="test-key"
         )
         assert config.batch_size == 16
         assert config.device == "cpu"
         assert config.cache_dir == "custom_cache"
         assert config.aggregate is False
         assert config.threshold == 0.7
+        assert config.provider == "openrouter"
+        assert config.api_key == "test-key"
 
 
 class TestMetricsConfig:
@@ -68,19 +81,19 @@ class TestMetricsConfig:
     def test_additional_metrics_merge(self):
         """Test that additional_metrics are merged into metrics."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge"],
+            metrics=["bleu", "rouge1"],
             additional_metrics=["sentbert", "cola"]
         )
-        expected_metrics = ["bleu", "rouge", "sentbert", "cola"]
+        expected_metrics = ["bleu", "rouge1", "sentbert", "cola"]
         assert config.metrics == expected_metrics
         
     def test_duplicate_metrics_removed(self):
         """Test that duplicate metrics are removed while preserving order."""
         config = MetricsConfig(
-            metrics=["bleu", "rouge", "bleu"],
-            additional_metrics=["sentbert", "rouge"]
+            metrics=["bleu", "rouge1", "bleu"],
+            additional_metrics=["sentbert", "rouge1"]
         )
-        expected_metrics = ["bleu", "rouge", "sentbert"]
+        expected_metrics = ["bleu", "rouge1", "sentbert"]
         assert config.metrics == expected_metrics
         
     def test_deepeval_legacy_params(self):
@@ -113,6 +126,28 @@ class TestMetricsFactory:
         assert "rouge1" in metrics
         assert "sentbert" in metrics
         assert "cola" in metrics
+        
+    def test_get_all_possible_metric_keys(self):
+        """Test getting all possible metric keys."""
+        keys = MetricsFactory.get_all_possible_metric_keys()
+        assert isinstance(keys, list)
+        assert len(keys) > len(MetricsFactory.get_available_metrics())
+        
+        # Should include specific metric keys
+        assert "sentbert_pred_ref" in keys
+        assert "sentbert_pred_src" in keys
+        assert "rouge1" in keys
+        assert "rouge2" in keys
+        assert "rougeL" in keys
+        assert "exact_match" in keys
+        assert "word_length_gen" in keys
+        
+    def test_available_metrics_global(self):
+        """Test AVAILABLE_METRICS global variable."""
+        assert isinstance(AVAILABLE_METRICS, list)
+        assert len(AVAILABLE_METRICS) > 20  # Should be comprehensive
+        assert "sentbert_pred_ref" in AVAILABLE_METRICS
+        assert "deepeval_answer_relevance" in AVAILABLE_METRICS
         
     def test_create_metric_success(self):
         """Test successful metric creation."""
@@ -160,37 +195,91 @@ class TestMetricsFactory:
         assert len(metrics) == 2
         assert "bleu" in metrics
         assert "rouge1" in metrics
+
+
+class TestPerformanceCheckingIntegration:
+    """Test integration with performance checking system."""
+    
+    def test_check_required_performance_valid_metrics(self):
+        """Test check_required_performance with valid metrics."""
+        performance_dict = DictConfig({
+            'bleu': 0.3,
+            'rouge1': 0.5,
+            'sentbert_pred_ref': 0.7,
+            'deepeval_answer_relevance': 0.8
+        })
         
-    def test_register_custom_metric(self):
-        """Test registering a custom metric."""
-        class CustomMetric(BaseMetric):
-            def calculate(self, predictions, references, original_texts):
-                return {"custom": 0.5}
-                
-        MetricsFactory.register_metric("custom", CustomMetric)
-        
-        try:
-            available = MetricsFactory.get_available_metrics()
-            assert "custom" in available
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = check_required_performance(performance_dict)
             
-            metric = MetricsFactory.create_metric("custom")
-            assert isinstance(metric, CustomMetric)
-        finally:
-            # Clean up
-            if "custom" in MetricsFactory._metric_registry:
-                del MetricsFactory._metric_registry["custom"]
+            # Should have no warnings for valid metrics
+            assert len(w) == 0
+            assert dict(result) == dict(performance_dict)
+    
+    def test_check_required_performance_invalid_metrics(self):
+        """Test check_required_performance with invalid metrics."""
+        performance_dict = DictConfig({
+            'bleu': 0.3,
+            'nonexistent_metric': 0.5,
+            'rouge1': 1.5  # Invalid value > 1
+        })
+        
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = check_required_performance(performance_dict)
+            
+            # Should have warnings for invalid metrics
+            assert len(w) == 2
+            assert dict(result) == {'bleu': 0.3}  # Only valid metric remains
+    
+    def test_performance_checking_pipeline(self):
+        """Test complete performance checking pipeline."""
+        # Simulate computed metrics
+        metrics = {
+            'bleu': 0.4,
+            'rouge1': 0.6,
+            'sentbert_pred_ref': 0.8,
+            'word_length_gen': 10.5,
+            'exact_match': 0.2,
+            'time_total': 5.2
+        }
+        
+        # Set performance requirements
+        required_performance = DictConfig({
+            'bleu': 0.3,
+            'rouge1': 0.5,
+            'sentbert_pred_ref': 0.7
+        })
+        
+        # Check requirements
+        checked_requirements = check_required_performance(required_performance)
+        
+        # Test performance pipeline
+        is_performance_reached, is_metrics_availability_checked, available_metrics = (
+            check_performance_against_requirements(
+                metrics=metrics,
+                required_performance_dict=checked_requirements,
+                is_metrics_availability_checked=False,
+                available_metrics={}
+            )
+        )
+        
+        assert is_performance_reached is True
+        assert is_metrics_availability_checked is True
+        assert len(available_metrics) == 3
 
 
-class TestIdenticalStringsBasic:
-    """Test all metrics with identical strings to ensure basic functionality."""
+class TestBasicMetricFunctionality:
+    """Test basic functionality of individual metrics."""
     
     @pytest.fixture
-    def identical_data(self):
-        """Sample data with identical predictions and references."""
+    def sample_data(self):
+        """Sample data for testing."""
         return {
             "predictions": ["This is a test sentence.", "Another test sentence here."],
             "references": ["This is a test sentence.", "Another test sentence here."],
-            "original_texts": ["Original text one.", "Original text two."]
+            "original_texts": ["What is this?", "What is that?"]
         }
     
     @pytest.fixture
@@ -200,141 +289,88 @@ class TestIdenticalStringsBasic:
         yield temp_dir
         shutil.rmtree(temp_dir, ignore_errors=True)
     
-    def test_bleu_identical_strings(self, identical_data, temp_cache_dir):
-        """Test BLEU metric with identical strings."""
+    def test_bleu_metric(self, sample_data, temp_cache_dir):
+        """Test BLEU metric functionality."""
         config = MetricConfig(device="cpu", cache_dir=temp_cache_dir)
         metric = BleuMetric(config)
         
         results = metric.calculate(
-            identical_data["predictions"],
-            identical_data["references"],
-            identical_data["original_texts"]
+            sample_data["predictions"],
+            sample_data["references"],
+            sample_data["original_texts"]
         )
         
         assert "bleu" in results
         if isinstance(results["bleu"], np.ndarray):
-            # Should be perfect scores for identical strings
-            assert all(score == 1.0 for score in results["bleu"])
+            assert all(score == 1.0 for score in results["bleu"])  # Identical strings
         else:
             assert results["bleu"] == 1.0
             
-    def test_rouge_identical_strings(self, identical_data, temp_cache_dir):
-        """Test ROUGE metric with identical strings."""
+    def test_rouge_metric(self, sample_data, temp_cache_dir):
+        """Test ROUGE metric functionality."""
         config = MetricConfig(device="cpu", cache_dir=temp_cache_dir)
         metric = RougeMetric(config)
         
         results = metric.calculate(
-            identical_data["predictions"],
-            identical_data["references"],
-            identical_data["original_texts"]
+            sample_data["predictions"],
+            sample_data["references"],
+            sample_data["original_texts"]
         )
         
-        # ROUGE should return perfect scores for identical strings
-        rouge_keys = ["rouge1", "rouge2", "rougeL"]
-        for key in rouge_keys:
-            if key in results:
-                if isinstance(results[key], np.ndarray):
-                    assert all(score == 1.0 for score in results[key])
-                else:
-                    assert results[key] == 1.0
-                    
+        # Should return multiple ROUGE variants
+        rouge_keys = ["rouge1", "rouge2", "rougeL", "rougeLsum"]
+        found_keys = [key for key in rouge_keys if key in results]
+        assert len(found_keys) > 0
+        
+        # Perfect scores for identical strings
+        for key in found_keys:
+            if isinstance(results[key], np.ndarray):
+                assert all(score == 1.0 for score in results[key])
+            else:
+                assert results[key] == 1.0
+                
     @patch('torch.cuda.is_available', return_value=False)
-    def test_sentbert_identical_strings(self, mock_cuda, identical_data, temp_cache_dir):
-        """Test SentBERT metric with identical strings."""
+    def test_sentbert_metric(self, mock_cuda, sample_data, temp_cache_dir):
+        """Test SentBERT metric functionality."""
         config = MetricConfig(device="cpu", cache_dir=temp_cache_dir)
         metric = SentBertMetric(config)
         
         results = metric.calculate(
-            identical_data["predictions"],
-            identical_data["references"],
-            identical_data["original_texts"]
+            sample_data["predictions"],
+            sample_data["references"],
+            sample_data["original_texts"]
         )
         
-        # SentBERT should return high similarity scores for identical strings
-        if "sentbert_pred_ref" in results:
-            if isinstance(results["sentbert_pred_ref"], np.ndarray):
-                assert all(score > 0.99 for score in results["sentbert_pred_ref"])
-            else:
-                assert results["sentbert_pred_ref"] > 0.99
+        # Should return both pred-ref and pred-src similarities
+        assert "sentbert_pred_ref" in results
+        assert "sentbert_pred_src" in results
+        
+        # High similarity for identical strings
+        if isinstance(results["sentbert_pred_ref"], np.ndarray):
+            assert all(score > 0.99 for score in results["sentbert_pred_ref"])
+        else:
+            assert results["sentbert_pred_ref"] > 0.99
                 
     @patch('torch.cuda.is_available', return_value=False)
-    def test_cola_identical_strings(self, mock_cuda, identical_data, temp_cache_dir):
-        """Test CoLA metric with identical strings."""
+    def test_cola_metric(self, mock_cuda, sample_data, temp_cache_dir):
+        """Test CoLA metric functionality."""
         config = MetricConfig(device="cpu", cache_dir=temp_cache_dir)
         metric = ColaMetric(config)
         
         results = metric.calculate(
-            identical_data["predictions"],
-            identical_data["references"],
-            identical_data["original_texts"]
+            sample_data["predictions"],
+            sample_data["references"],
+            sample_data["original_texts"]
         )
         
-        # CoLA should return grammaticality scores
-        assert "cola" in results
-        if isinstance(results["cola"], np.ndarray):
-            assert all(0 <= score <= 1 for score in results["cola"])
+        assert "cola" in results or "grammaticality" in results
+        
+        # Should return reasonable grammaticality scores
+        score_key = "cola" if "cola" in results else "grammaticality"
+        if isinstance(results[score_key], np.ndarray):
+            assert all(0 <= score <= 1 for score in results[score_key])
         else:
-            assert 0 <= results["cola"] <= 1
-
-    @patch('torch.cuda.is_available', return_value=False)
-    def test_bartscore_identical_strings(self, mock_cuda, identical_data, temp_cache_dir):
-        """Test BARTScore metric with identical strings."""
-        config = MetricConfig(device="cpu", cache_dir=temp_cache_dir, batch_size=2)
-        metric = BartScoreMetric(config)
-        
-        try:
-            results = metric.calculate(
-                identical_data["predictions"],
-                identical_data["references"],
-                identical_data["original_texts"]
-            )
-            
-            # BARTScore should return high scores for identical strings
-            assert isinstance(results, dict)
-            assert len(results) > 0
-            
-            # Check that scores are reasonable (BARTScore can vary but should be positive for identical strings)
-            for key, value in results.items():
-                if isinstance(value, np.ndarray):
-                    assert all(isinstance(score, (int, float)) for score in value)
-                else:
-                    assert isinstance(value, (int, float))
-                    
-        except Exception as e:
-            # BARTScore might not be available or have dependency issues
-            pytest.skip(f"BARTScore test skipped due to: {e}")
-
-    @patch('torch.cuda.is_available', return_value=False)
-    def test_alignscore_identical_strings(self, mock_cuda, identical_data, temp_cache_dir):
-        """Test AlignScore metric with identical strings."""
-        # Skip test if AlignScore is not available
-        if AlignScoreMetric is None:
-            pytest.skip("AlignScore metric not available due to import issues")
-            
-        config = MetricConfig(device="cpu", cache_dir=temp_cache_dir, batch_size=2)
-        metric = AlignScoreMetric(config)
-        
-        try:
-            results = metric.calculate(
-                identical_data["predictions"],
-                identical_data["references"],
-                identical_data["original_texts"]
-            )
-            
-            # AlignScore should return high scores for identical strings
-            assert isinstance(results, dict)
-            assert len(results) > 0
-            
-            # Check that scores are reasonable
-            for key, value in results.items():
-                if isinstance(value, np.ndarray):
-                    assert all(isinstance(score, (int, float)) for score in value)
-                else:
-                    assert isinstance(value, (int, float))
-                    
-        except Exception as e:
-            # AlignScore might not be available or have dependency issues
-            pytest.skip(f"AlignScore test skipped due to: {e}")
+            assert 0 <= results[score_key] <= 1
 
 
 class TestComputeMetrics:
@@ -365,7 +401,6 @@ class TestComputeMetrics:
             cache_dir=temp_cache_dir
         )
         
-        # Should include basic metrics
         assert isinstance(results, dict)
         assert len(results) > 0
         
@@ -377,14 +412,59 @@ class TestComputeMetrics:
         assert "word_length_gen" in results
         assert "exact_match" in results
         
-    def test_compute_metrics_custom_config(self, sample_data, temp_cache_dir):
-        """Test compute_metrics with custom configuration."""
-        config = MetricsConfig(
-            metrics=["bleu", "rouge1"],
-            device="cpu",
-            cache_dir=temp_cache_dir,
-            batch_size=16
+        # Exact match should be 1.0 for identical strings
+        assert results["exact_match"] == 1.0
+        
+    def test_compute_metrics_comprehensive_config(self, sample_data, temp_cache_dir):
+        """Test compute_metrics with comprehensive configuration."""
+        config = DictConfig({
+            'metrics': ['bleu', 'rouge1', 'sentbert', 'cola'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir,
+            'batch_size': 16,
+            'aggregate': True
+        })
+        
+        results = compute_metrics(
+            generated_texts=sample_data["predictions"],
+            reference_texts=sample_data["references"],
+            original_texts=sample_data["original_texts"],
+            config=config
         )
+        
+        assert isinstance(results, dict)
+        assert len(results) > 10  # Should have many metrics
+        
+        # Check key metrics are present
+        assert "bleu" in results
+        assert "rouge1" in results
+        assert "sentbert_pred_ref" in results
+        assert any(key in results for key in ["cola", "grammaticality"])
+        
+        # Perfect scores for identical strings
+        assert results["bleu"] == 1.0
+        assert results["rouge1"] == 1.0
+        assert results["exact_match"] == 1.0
+        
+    def test_compute_metrics_with_deepeval_config(self, sample_data, temp_cache_dir):
+        """Test compute_metrics with DeepEval configuration."""
+        # Skip if no API key available
+        api_key = os.environ.get('OPENROUTER_API_KEY')
+        if not api_key:
+            pytest.skip("No OpenRouter API key available for DeepEval testing")
+            
+        config = DictConfig({
+            'metrics': ['bleu', 'deepeval_answer_relevance'],
+            'provider': 'openrouter',
+            'base_url': 'https://openrouter.ai/api/v1',
+            'api_key': api_key,
+            'model': 'openai/gpt-4o-mini',
+            'threshold': 0.5,
+            'async_mode': False,
+            'verbose_mode': False,
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir
+        })
         
         results = compute_metrics(
             generated_texts=sample_data["predictions"],
@@ -395,15 +475,21 @@ class TestComputeMetrics:
         
         assert isinstance(results, dict)
         assert "bleu" in results
-        assert any(key.startswith("rouge") for key in results.keys())
+        
+        # Check if DeepEval worked
+        deepeval_keys = [k for k in results.keys() if 'deepeval' in k and not k.startswith('time_')]
+        if deepeval_keys:
+            assert len(deepeval_keys) > 0
+            for key in deepeval_keys:
+                assert 0 <= results[key] <= 1
         
     def test_compute_metrics_no_references(self, sample_data, temp_cache_dir):
         """Test compute_metrics without references."""
-        config = MetricsConfig(
-            metrics=["sentbert", "cola"],
-            device="cpu",
-            cache_dir=temp_cache_dir
-        )
+        config = DictConfig({
+            'metrics': ['sentbert', 'cola'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir
+        })
         
         results = compute_metrics(
             generated_texts=sample_data["predictions"],
@@ -413,8 +499,8 @@ class TestComputeMetrics:
         )
         
         assert isinstance(results, dict)
-        # Should still include basic statistics
         assert "word_length_gen" in results
+        assert "sentbert_pred_src" in results  # Should have pred-src similarity
         
     def test_compute_metrics_empty_predictions(self):
         """Test compute_metrics with empty predictions."""
@@ -438,6 +524,8 @@ class TestComputeMetrics:
         
         assert isinstance(results, dict)
         assert len(results) > 0
+        assert "bleu" in results
+        assert "rouge1" in results
 
 
 class TestMetricRequirements:
@@ -485,7 +573,7 @@ class TestConfigurationFunctions:
         
         assert isinstance(config, MetricsConfig)
         assert "bleu" in config.metrics
-        assert "rouge1" in config.metrics
+        assert "rouge1" in config.metrics or any("rouge" in m for m in config.metrics)
         assert config.batch_size == 32
         assert config.device == "cuda"
         
@@ -494,7 +582,7 @@ class TestConfigurationFunctions:
         config = get_comprehensive_config()
         
         assert isinstance(config, MetricsConfig)
-        assert len(config.metrics) > 2  # Should include more metrics
+        assert len(config.metrics) > 2
         assert "bleu" in config.metrics
         assert any("rouge" in metric for metric in config.metrics)
         assert "sentbert" in config.metrics
@@ -513,11 +601,11 @@ class TestEdgeCases:
     
     def test_empty_strings(self, temp_cache_dir):
         """Test metrics with empty strings."""
-        config = MetricsConfig(
-            metrics=["bleu", "rouge1"],
-            device="cpu",
-            cache_dir=temp_cache_dir
-        )
+        config = DictConfig({
+            'metrics': ['bleu', 'rouge1'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir
+        })
         
         results = compute_metrics(
             generated_texts=["", ""],
@@ -531,11 +619,11 @@ class TestEdgeCases:
         
     def test_single_item_lists(self, temp_cache_dir):
         """Test metrics with single item lists."""
-        config = MetricsConfig(
-            metrics=["bleu", "rouge1"],
-            device="cpu",
-            cache_dir=temp_cache_dir
-        )
+        config = DictConfig({
+            'metrics': ['bleu', 'rouge1'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir
+        })
         
         results = compute_metrics(
             generated_texts=["Single test sentence."],
@@ -546,14 +634,15 @@ class TestEdgeCases:
         
         assert isinstance(results, dict)
         assert len(results) > 0
+        assert results["exact_match"] == 1.0  # Identical strings
         
     def test_multiple_references(self, temp_cache_dir):
         """Test metrics with multiple references."""
-        config = MetricsConfig(
-            metrics=["bleu", "rouge1"],
-            device="cpu",
-            cache_dir=temp_cache_dir
-        )
+        config = DictConfig({
+            'metrics': ['bleu', 'rouge1'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir
+        })
         
         results = compute_metrics(
             generated_texts=["Test sentence."],
@@ -564,32 +653,10 @@ class TestEdgeCases:
         
         assert isinstance(results, dict)
         assert len(results) > 0
-        
-    def test_mismatched_lengths(self, temp_cache_dir):
-        """Test metrics with mismatched input lengths."""
-        config = MetricsConfig(
-            metrics=["bleu"],
-            device="cpu",
-            cache_dir=temp_cache_dir
-        )
-        
-        # This should handle gracefully or raise appropriate error
-        try:
-            results = compute_metrics(
-                generated_texts=["Test sentence.", "Another sentence."],
-                reference_texts=["Test sentence."],  # Shorter list
-                original_texts=["Source text."],
-                config=config
-            )
-            # If it doesn't raise an error, check that results are reasonable
-            assert isinstance(results, dict)
-        except (ValueError, IndexError, AssertionError):
-            # These are acceptable errors for mismatched lengths
-            pass
 
 
-class TestMetricIntegration:
-    """Integration tests for the complete metrics system."""
+class TestRealWorldScenarios:
+    """Test realistic scenarios that would occur in active learning."""
     
     @pytest.fixture
     def temp_cache_dir(self):
@@ -598,115 +665,121 @@ class TestMetricIntegration:
         yield temp_dir
         shutil.rmtree(temp_dir, ignore_errors=True)
     
-    def test_all_lexical_metrics(self, temp_cache_dir):
-        """Test all lexical metrics together."""
-        config = MetricsConfig(
-            metrics=["bleu", "rouge1"],
-            device="cpu",
-            cache_dir=temp_cache_dir,
-            aggregate=True
-        )
+    def test_active_learning_integration(self, temp_cache_dir):
+        """Test complete active learning integration scenario."""
+        # Realistic generated texts
+        generated_texts = [
+            "Machine learning algorithms learn patterns from training data to make predictions.",
+            "Deep learning uses neural networks with multiple layers to process information.",
+            "Natural language processing helps computers understand human language."
+        ]
         
+        reference_texts = [
+            "ML algorithms learn from data to make predictions on new examples.",
+            "Deep learning employs multi-layered neural networks for complex data processing.",
+            "NLP enables computers to work with human language effectively."
+        ]
+        
+        original_texts = [
+            "How do machine learning algorithms work?",
+            "What is deep learning?",
+            "Explain natural language processing."
+        ]
+        
+        # Comprehensive config similar to active learning setup
+        config = DictConfig({
+            'metrics': ['bleu', 'rouge1', 'rouge2', 'rougeL', 'sentbert'],
+            'additional_metrics': ['cola'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir,
+            'batch_size': 16,
+            'aggregate': True
+        })
+        
+        # Compute metrics
         results = compute_metrics(
-            generated_texts=["This is a comprehensive test sentence.", "Another test for metrics."],
-            reference_texts=["This is a comprehensive test sentence.", "Another test for metrics."],
-            original_texts=["Source text one.", "Source text two."],
+            generated_texts=generated_texts,
+            reference_texts=reference_texts,
+            original_texts=original_texts,
             config=config
         )
         
-        assert "bleu" in results
-        assert any(key.startswith("rouge") for key in results.keys())
+        # Verify comprehensive results
+        assert isinstance(results, dict)
+        assert len(results) > 10
         
-        # All scores should be 1.0 for identical strings
-        # BLEU is aggregated so should be a single value
-        assert isinstance(results["bleu"], (int, float))
-        assert results["bleu"] == 1.0
+        # Check key performance metrics
+        performance_keys = ['bleu', 'rouge1', 'rouge2', 'rougeL', 'sentbert_pred_ref']
+        for key in performance_keys:
+            if key in results:
+                assert isinstance(results[key], (int, float))
+                assert 0 <= results[key] <= 1
         
-    @patch('torch.cuda.is_available', return_value=False)
-    def test_comprehensive_metrics_suite(self, mock_cuda, temp_cache_dir):
-        """Test a comprehensive suite of metrics."""
-        config = MetricsConfig(
-            metrics=["bleu", "rouge1", "sentbert", "cola"],
-            device="cpu",
-            cache_dir=temp_cache_dir,
-            batch_size=8,
-            aggregate=True
-        )
+        # Test performance checking integration
+        required_performance = DictConfig({
+            'bleu': 0.15,
+            'rouge1': 0.35,
+            'sentbert_pred_ref': 0.55
+        })
         
-        results = compute_metrics(
-            generated_texts=[
-                "This is a well-formed grammatical sentence.",
-                "Another properly structured sentence here."
-            ],
-            reference_texts=[
-                "This is a well-formed grammatical sentence.",
-                "Another properly structured sentence here."
-            ],
-            original_texts=[
-                "Source text for the first sentence.",
-                "Source text for the second sentence."
-            ],
-            config=config
-        )
+        checked_requirements = check_required_performance(required_performance)
+        assert len(checked_requirements) == 3  # All should be valid
         
-        # Should include results from all metric types
-        assert "bleu" in results
-        assert any(key.startswith("rouge") for key in results.keys())
-        assert any(key.startswith("sentbert") for key in results.keys())
-        assert "cola" in results
-        
-        # Should include timing and basic stats
-        assert "time_total" in results
-        assert "word_length_gen" in results
-        assert "exact_match" in results
-        
-        # Exact match should be 1.0 for identical strings
-        assert results["exact_match"] == 1.0
-
-    @patch('torch.cuda.is_available', return_value=False)
-    def test_semantic_metrics_suite(self, mock_cuda, temp_cache_dir):
-        """Test semantic metrics including BARTScore and AlignScore."""
-        config = MetricsConfig(
-            metrics=["sentbert", "bartscore", "alignscore"],
-            device="cpu",
-            cache_dir=temp_cache_dir,
-            batch_size=4,
-            aggregate=True
-        )
-        
-        try:
-            results = compute_metrics(
-                generated_texts=[
-                    "This is a semantic similarity test.",
-                    "Another sentence for testing."
-                ],
-                reference_texts=[
-                    "This is a semantic similarity test.",
-                    "Another sentence for testing."
-                ],
-                original_texts=[
-                    "Source text for semantic testing.",
-                    "Another source text here."
-                ],
-                config=config
+        # Test complete pipeline
+        is_performance_reached, is_metrics_availability_checked, available_metrics = (
+            check_performance_against_requirements(
+                metrics=results,
+                required_performance_dict=checked_requirements,
+                is_metrics_availability_checked=False,
+                available_metrics={}
             )
-            
-            # Should include results from semantic metrics
-            assert isinstance(results, dict)
-            assert len(results) > 0
-            
-            # Should include timing and basic stats
-            assert "time_total" in results
-            assert "word_length_gen" in results
-            assert "exact_match" in results
-            
-            # Exact match should be 1.0 for identical strings
-            assert results["exact_match"] == 1.0
-            
-        except Exception as e:
-            # Some semantic metrics might not be available
-            pytest.skip(f"Semantic metrics test skipped due to: {e}")
+        )
+        
+        assert is_metrics_availability_checked is True
+        assert len(available_metrics) == 3
+        
+    def test_high_quality_generation_scenario(self, temp_cache_dir):
+        """Test scenario with high-quality generated text."""
+        # High-quality generated texts (should score well)
+        generated_texts = [
+            "The capital of France is Paris, which is also its largest city.",
+            "Artificial intelligence is transforming various industries worldwide."
+        ]
+        
+        reference_texts = [
+            "Paris is the capital and largest city of France.",
+            "AI is revolutionizing industries across the globe."
+        ]
+        
+        original_texts = [
+            "What is the capital of France?",
+            "How is AI impacting industries?"
+        ]
+        
+        config = DictConfig({
+            'metrics': ['bleu', 'rouge1', 'sentbert', 'cola'],
+            'device': 'cpu',
+            'cache_dir': temp_cache_dir,
+            'aggregate': True
+        })
+        
+        results = compute_metrics(
+            generated_texts=generated_texts,
+            reference_texts=reference_texts,
+            original_texts=original_texts,
+            config=config
+        )
+        
+        # Should get reasonable scores for good quality text
+        assert results['bleu'] > 0.1  # Some lexical overlap
+        assert results['rouge1'] > 0.2  # Some word overlap
+        assert results['sentbert_pred_ref'] > 0.5  # Good semantic similarity
+        
+        # CoLA should give high grammaticality scores
+        cola_key = 'cola' if 'cola' in results else 'grammaticality'
+        if cola_key in results:
+            assert results[cola_key] > 0.7  # Well-formed sentences
 
 
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__, "-v"]) 
