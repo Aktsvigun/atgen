@@ -65,7 +65,10 @@ class OpenAILabeller(BaseLabeler):
         super().__init__(output_column_name, budget)
         self.config = config
         # Create the OpenAI client
-        kwargs = {} if base_url is None else {"base_url": base_url}
+        if base_url := (base_url or config.base_url):
+            kwargs = {"base_url": base_url}
+        else:
+            kwargs = {}
         self.client = OpenAI(api_key=self.config.api_key, **kwargs)
         self.mode = config.get("mode")
 

@@ -100,6 +100,9 @@ def semantic_frame_score(
     entailment_model = entailment_model.to(device)
 
     batch_results = []
+    # Work-around for conversational data
+    if isinstance(documents[0], list):
+        documents = [inst[-2]['content'].strip() for inst in documents]
     for i_start in range(0, len(documents), batch_size):
         inputs = entailment_tokenizer(
             list(
