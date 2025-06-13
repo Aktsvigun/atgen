@@ -26,9 +26,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        chmod +x install.sh
         pip install -e .
-        ./install.sh
         pip install flake8 pytest
     - name: Test with pytest
       run: |
