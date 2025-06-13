@@ -59,7 +59,7 @@ def compute_metrics(
     if config is None:
         # Default configuration
         metrics_config = MetricsConfig(
-            metrics=["bleu", "rouge1"],
+            metrics=["bleu", "rouge"],
             batch_size=32,
             device="cuda",
             aggregate=True
@@ -197,7 +197,7 @@ def compute_metrics_from_config(
 def get_default_config() -> MetricsConfig:
     """Get a default metrics configuration."""
     return MetricsConfig(
-        metrics=["bleu", "rouge1"],
+        metrics=["bleu", "rouge"],
         batch_size=32,
         device="cuda",
         cache_dir="cache",
@@ -209,7 +209,7 @@ def get_comprehensive_config() -> MetricsConfig:
     """Get a comprehensive metrics configuration with all metrics."""
     return MetricsConfig(
         metrics=[
-            "bleu", "rouge1", "rouge2", "rougeL",
+            "bleu", "rouge",
             "sentbert",
             "cola",
         ],
