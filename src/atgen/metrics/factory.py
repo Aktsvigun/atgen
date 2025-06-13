@@ -83,43 +83,106 @@ class MetricsConfig:
 class MetricsFactory:
     """Factory for creating metric instances."""
     
-    _metric_registry = {
-        "bleu": BleuMetric,
-        "rouge1": RougeMetric,
-        "rouge2": RougeMetric,
-        "rougeL": RougeMetric,
-        "rougeLsum": RougeMetric,
-        
-        "bartscore": BartScoreMetric,
-        "alignscore": AlignScoreMetric,
-        "sentbert": SentBertMetric,
-        "sentence_bert": SentBertMetric,
-        
-        "cola": ColaMetric,
-        "grammaticality": ColaMetric,
-        
-        "deepeval_answer_relevance": DeepEvalAnswerRelevancyMetric,
-        "deepeval_faithfulness": DeepEvalFaithfulnessMetric,
-        "deepeval_summarization": DeepEvalSummarizationMetric,
-        "deepeval_prompt_alignment": DeepEvalPromptAlignmentMetric,
-        "bigbench_hard": BigBenchHardMetric,
-        "big_bench_hard": BigBenchHardMetric,
-    }
+    # Build registry dynamically to handle None values from import failures
+    _metric_registry = {}
+    
+    @classmethod
+    def _build_registry(cls):
+        """Build the metric registry, excluding None values from failed imports."""
+        if not cls._metric_registry:  # Only build once
+            registry = {
+                "bleu": BleuMetric,
+                "rouge1": RougeMetric,
+                "rouge2": RougeMetric,
+                "rougeL": RougeMetric,
+                "rougeLsum": RougeMetric,
+                
+                "cola": ColaMetric,
+                "grammaticality": ColaMetric,
+                
+                "deepeval_answer_relevance": DeepEvalAnswerRelevancyMetric,
+                "deepeval_faithfulness": DeepEvalFaithfulnessMetric,
+                "deepeval_summarization": DeepEvalSummarizationMetric,
+                "deepeval_prompt_alignment": DeepEvalPromptAlignmentMetric,
+                "bigbench_hard": BigBenchHardMetric,
+                "big_bench_hard": BigBenchHardMetric,
+            }
+            
+            # Add semantic metrics if they imported successfully
+            if BartScoreMetric is not None:
+                registry["bartscore"] = BartScoreMetric
+            if AlignScoreMetric is not None:
+                registry["alignscore"] = AlignScoreMetric
+            if SentBertMetric is not None:
+                registry["sentbert"] = SentBertMetric
+                registry["sentence_bert"] = SentBertMetric
+            
+            cls._metric_registry = registry
     
     @classmethod
     def register_metric(cls, name: str, metric_class: type):
         """Register a new metric class."""
+        cls._build_registry()
         cls._metric_registry[name] = metric_class
         logger.info(f"Registered metric: {name} -> {metric_class.__name__}")
     
     @classmethod
     def get_available_metrics(cls) -> List[str]:
         """Get list of all available metric names."""
+        cls._build_registry()
         return list(cls._metric_registry.keys())
     
     @classmethod
+    def get_all_possible_metric_keys(cls) -> List[str]:
+        """
+        Get list of all possible metric keys that can be returned by compute_metrics.
+        This includes not just metric names, but all the specific keys that metrics can return.
+        """
+        cls._build_registry()
+        
+        # Base metric names
+        metric_keys = list(cls._metric_registry.keys())
+        
+        # Add specific keys that metrics return (not just their names)
+        additional_keys = [
+            # ROUGE variants
+            "rouge1", "rouge2", "rougeL", "rougeLsum",
+            
+            # SentBERT variants
+            "sentbert_pred_ref", "sentbert_pred_src",
+            
+            # BLEU
+            "bleu",
+            
+            # CoLA/Grammaticality
+            "cola", "grammaticality", "grammaticality_score",
+            
+            # BARTScore variants (if available)
+            "bartscore", "bartscore_pred_ref", "bartscore_pred_src", "bartscore_ref_pred",
+            
+            # AlignScore variants (if available)  
+            "alignscore", "alignscore_pred_ref", "alignscore_pred_src",
+            
+            # DeepEval metrics
+            "deepeval_answer_relevance", "deepeval_faithfulness", 
+            "deepeval_summarization", "deepeval_prompt_alignment",
+            
+            # BigBench variants
+            "bigbench_hard", "big_bench_hard",
+            
+            # Statistical metrics that compute_metrics always adds
+            "word_length_gen", "word_length_src_rel", "word_length_rel", "exact_match",
+        ]
+        
+        # Combine and deduplicate
+        all_keys = list(set(metric_keys + additional_keys))
+        all_keys.sort()
+        
+        return all_keys
+    
+    @classmethod
     def create_metric(cls, name: str, config: Optional[MetricConfig] = None) -> BaseMetric:
-
+        cls._build_registry()
         name = name.lower().strip()
         
         if name not in cls._metric_registry:
@@ -199,8 +262,9 @@ def get_metric_requirements() -> Dict[str, Dict[str, bool]]:
         "sentbert": {"requires_references": False, "requires_original_texts": False},
         "cola": {"requires_references": False, "requires_original_texts": False},
         "deepeval_answer_relevance": {"requires_references": False, "requires_original_texts": True},
-        "deepeval_faithfulness": {"requires_references": False, "requires_original_texts": True},
-        "deepeval_summarization": {"requires_references": False, "requires_original_texts": True},
-        "deepeval_prompt_alignment": {"requires_references": True, "requires_original_texts": True},
+        "deepeval_faithfulness": {"requires_references": True, "requires_original_texts": True},
+        "deepeval_summarization": {"requires_references": True, "requires_original_texts": True},
+        "deepeval_prompt_alignment": {"requires_references": False, "requires_original_texts": True},
         "bigbench_hard": {"requires_references": False, "requires_original_texts": False},
+        "big_bench_hard": {"requires_references": False, "requires_original_texts": False},
     } 

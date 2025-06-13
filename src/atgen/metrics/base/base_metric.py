@@ -15,6 +15,7 @@ class MetricConfig:
     model_name: Optional[str] = None
     
     # API-based parameters (for LLM-based metrics)
+    provider: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
@@ -46,4 +47,8 @@ class BaseMetric(ABC):
     @abstractmethod
     def calculate(self, predictions, references, original_texts):
         pass
+    
+    def is_available(self) -> bool:
+        """Check if the metric is available for use."""
+        return True
     

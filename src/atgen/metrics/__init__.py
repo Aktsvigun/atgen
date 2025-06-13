@@ -1,4 +1,3 @@
-
 # Base classes
 from .base import BaseMetric, MetricConfig
 
@@ -86,13 +85,25 @@ __all__ = [
     "get_comprehensive_config",
     "get_deepeval_config",
     
+    # Helper functions
+    "get_available_metrics",
+    "get_all_possible_metric_keys",
+    "create_metric",
+    "create_metrics_from_config",
+    
     "AVAILABLE_METRICS",
+    "METRICS",
 ]
 
 
 def get_available_metrics():
-    """Get all available metrics."""
+    """Get all available metric names."""
     return MetricsFactory.get_available_metrics()
+
+
+def get_all_possible_metric_keys():
+    """Get all possible metric keys that can be returned by compute_metrics."""
+    return MetricsFactory.get_all_possible_metric_keys()
 
 
 def create_metric(name: str, config: MetricConfig = None):
@@ -104,4 +115,8 @@ def create_metrics_from_config(config):
     """Create metrics from configuration."""
     return MetricsFactory.create_from_config(config)
 
-AVAILABLE_METRICS = MetricsFactory.get_available_metrics() 
+# For backward compatibility, still provide the basic metric names
+METRICS = MetricsFactory.get_available_metrics()
+
+# But AVAILABLE_METRICS should include all possible keys for performance checking
+AVAILABLE_METRICS = MetricsFactory.get_all_possible_metric_keys() 
