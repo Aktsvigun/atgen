@@ -16,6 +16,7 @@ class RougeMetric(BaseMetric):
         """Initialize ROUGE if not already initialized."""
         if self.rouge is None:
             self.rouge = load("rouge", cache_dir=self.config.cache_dir)
+            
     
     def calculate(self, predictions: List[str], references: Optional[List[Union[str, List[str]]]] = None, original_texts: Optional[List[str]] = None) -> Dict[str, float]:
         """
@@ -54,13 +55,11 @@ class RougeMetric(BaseMetric):
         for key, value in results.items():
             if isinstance(value, (int, float)):
                 scores[key] = float(value)
-            elif hasattr(value, 'item'):  # For numpy scalars
+            elif hasattr(value, 'item'):  #
                 scores[key] = float(value.item())
             else:
                 scores[key] = float(value)
         
-        # ROUGE already aggregates by default, but we need to handle the case
-        # where it returns arrays (though this is typically rare)
         if self.config.aggregate:
             for key, value in scores.items():
                 if isinstance(value, np.ndarray):

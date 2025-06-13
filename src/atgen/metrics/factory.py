@@ -85,22 +85,25 @@ class MetricsFactory:
     
     _metric_registry = {
         "bleu": BleuMetric,
-        "rouge": RougeMetric,
+        "rouge1": RougeMetric,
+        "rouge2": RougeMetric,
+        "rougeL": RougeMetric,
+        "rougeLsum": RougeMetric,
         
         "bartscore": BartScoreMetric,
         "alignscore": AlignScoreMetric,
         "sentbert": SentBertMetric,
-        "sentence_bert": SentBertMetric,  # Alias
+        "sentence_bert": SentBertMetric,
         
         "cola": ColaMetric,
-        "grammaticality": ColaMetric,  # Alias
+        "grammaticality": ColaMetric,
         
         "deepeval_answer_relevance": DeepEvalAnswerRelevancyMetric,
         "deepeval_faithfulness": DeepEvalFaithfulnessMetric,
         "deepeval_summarization": DeepEvalSummarizationMetric,
         "deepeval_prompt_alignment": DeepEvalPromptAlignmentMetric,
         "bigbench_hard": BigBenchHardMetric,
-        "big_bench_hard": BigBenchHardMetric,  # Alias
+        "big_bench_hard": BigBenchHardMetric,
     }
     
     @classmethod

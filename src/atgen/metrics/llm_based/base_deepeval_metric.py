@@ -84,13 +84,11 @@ class BaseDeepEvalMetric(BaseMetric):
         if not test_cases:
             return {}
         
-        # Disable printing to console during evaluation if not verbose
         original_stdout = sys.stdout
         if not self.config.verbose_mode:
             sys.stdout = open(os.devnull, "w")
         
         try:
-            # Run evaluation
             evaluation_results = evaluate(
                 test_cases=test_cases,
                 metrics=[metric],

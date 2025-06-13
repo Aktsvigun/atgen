@@ -26,11 +26,11 @@ al:
     evaluate_zero_iteration: True
     subsample_size: -1
     required_performance:
-        rouge1: 0.5
+        rouge: 0.5
     budget:
 
 model:
-    checkpoint: Qwen/Qwen3-1.7B
+    checkpoint: Qwen/Qwen2.5-1.5B
     quantize: False
     model_max_length: ${multiply_with_few_shot:${data.input_max_length},${data.few_shot.count}}
     dtype: bfloat16
