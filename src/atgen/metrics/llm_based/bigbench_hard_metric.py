@@ -114,20 +114,6 @@ class BigBenchHardMetric(BaseMetric):
         self.benchmark_params = getattr(config, 'benchmark_params', {}) if config else {}
         self.model_name = getattr(config, 'model_name', 'Model') if config else 'Model'
     
-    def _check_dependencies(self) -> bool:
-        """Check if BigBenchHard dependencies are available."""
-        try:
-            from deepeval.benchmarks import BigBenchHard
-            from transformers import GenerationMixin, PreTrainedTokenizerBase
-            return True
-        except ImportError:
-            return False
-    
-    def _validate_config(self):
-        """Validate BigBenchHard configuration."""
-        super()._validate_config()
-        # BigBenchHard doesn't use the standard prediction/reference format
-        # so we don't need the usual validation
     
     def set_model_and_tokenizer(self, model: GenerationMixin, tokenizer: PreTrainedTokenizerBase):
         """

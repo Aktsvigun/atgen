@@ -112,8 +112,6 @@ class BartScoreMetric(BaseMetric):
         Returns:
             Dictionary with BARTScore results
         """
-        if not self.is_available():
-            raise RuntimeError("BARTScore dependencies not available")
         
         self._initialize_scorer()
         

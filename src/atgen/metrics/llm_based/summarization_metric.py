@@ -24,9 +24,7 @@ class DeepEvalSummarizationMetric(BaseDeepEvalMetric):
         Returns:
             Dictionary with Summarization scores
         """
-        if not self.is_available():
-            raise RuntimeError("DeepEval dependencies not available")
-        
+
         if original_texts is None:
             raise ValueError("Summarization metric requires original texts")
         

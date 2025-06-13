@@ -24,9 +24,7 @@ class DeepEvalPromptAlignmentMetric(BaseDeepEvalMetric):
         Returns:
             Dictionary with Prompt Alignment scores
         """
-        if not self.is_available():
-            raise RuntimeError("DeepEval dependencies not available")
-        
+
         if original_texts is None:
             raise ValueError("Prompt Alignment metric requires original texts")
         
