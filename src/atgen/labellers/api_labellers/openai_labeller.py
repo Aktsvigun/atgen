@@ -10,7 +10,7 @@ from pathlib import Path
 from shutil import rmtree
 
 from ..base_labeller import BaseLabeler
-from ...utils.constants import DEEPSEEK_R1_END_REASONING_TOKEN, MESSAGES_COLUMN_NAME
+from ...utils.constants import REASONING_END_TOKEN, MESSAGES_COLUMN_NAME
 
 
 log = logging.getLogger()
@@ -126,8 +126,8 @@ class OpenAILabeller(BaseLabeler):
         # Remove thinking tokens from DeepSeek-R1
         if "deepseek-r1" in self.config.parameters.model:
             for i, annotation in enumerate(annotations):
-                annotations[i] = DEEPSEEK_R1_END_REASONING_TOKEN.join(
-                    annotation.split(DEEPSEEK_R1_END_REASONING_TOKEN)[1:]
+                annotations[i] = REASONING_END_TOKEN.join(
+                    annotation.split(REASONING_END_TOKEN)[1:]
                 ).strip()
 
         # Add the annotations as a new column in the dataset

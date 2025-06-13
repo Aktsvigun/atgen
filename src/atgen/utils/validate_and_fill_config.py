@@ -1,6 +1,9 @@
 import os
-from omegaconf import DictConfig, open_dict
+from omegaconf import OmegaConf, DictConfig, open_dict
 import logging
+
+from .data.get_output_column_name_for_phase import get_output_column_name_for_phase
+from .constants import OUTPUT_FIELD_PURPOSE_TRAIN, OUTPUT_FIELD_PURPOSE_TEST
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +61,21 @@ def validate_and_fill_config(config: DictConfig) -> DictConfig:
         config.data.setdefault("few_shot", {})
         config.data.few_shot.setdefault("count", 0)
         config.data.few_shot.setdefault("separator", "\n\n")
+        # Add train and test output column names if not provided
+        if "train_output_column_name" not in config.data:
+            OmegaConf.update(
+                config,
+                "data.train_output_column_name",
+                get_output_column_name_for_phase(config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TRAIN),
+                force_add=True,
+            )
+        if "test_output_column_name" not in config.data:
+            OmegaConf.update(
+                config,
+                "data.test_output_column_name",
+                get_output_column_name_for_phase(config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TEST),
+                force_add=True,
+            )
 
         # Model
         validate_field(config, "model")

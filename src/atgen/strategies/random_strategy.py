@@ -1,7 +1,7 @@
 import numpy as np
 from datasets import Dataset
 
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 
 
 def random_strategy(
@@ -15,7 +15,7 @@ def random_strategy(
     return ids[:num_to_label]
 
 
-class RandomStrategy(Strategy):
+class RandomStrategy(BaseStrategy):
     def __init__(self, subsample_size: int = -1, seed: int = 42):
         super().__init__()
         self.seed = seed

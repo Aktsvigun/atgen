@@ -17,7 +17,7 @@ def exec_bash(s):
 
 def test_just_works():
     exec_result = exec_bash(
-        "HYDRA_CONFIG_NAME=test run-al +debug=false +save_model=false"
+        "HYDRA_CONFIG_NAME=test run-al +save_model=false"
     )
     assert exec_result.returncode == 0
 

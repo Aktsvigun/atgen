@@ -16,7 +16,7 @@ from hydra.core.global_hydra import GlobalHydra
 
 from pathlib import Path
 from atgen.run_scripts import run_active_learning
-from atgen.metrics.supported_models_and_metrics import (
+from atgen.metrics.deepeval_supported_models_and_metrics import (
     get_available_metrics,
     get_available_models,
 )
@@ -44,6 +44,7 @@ STATUS_IDLE = "idle"
 DATA_SOURCE_UPLOAD = "Upload file"
 DATA_SOURCE_HUGGINGFACE = "Huggingface dataset"
 
+
 # Create a cached resource for experiment status tracking
 @st.cache_resource
 def get_experiment_status_tracker():
@@ -54,8 +55,9 @@ def get_experiment_status_tracker():
         "experiment_name": None,
         "experiment_dir": None,
         "current_iteration": 0,
-        "total_iterations": 0
+        "total_iterations": 0,
     }
+
 
 # Apply custom CSS
 st.markdown(
@@ -237,12 +239,15 @@ def check_experiment_status():
         return status_tracker
     return None
 
-def update_experiment_status(status, experiment_name=None, experiment_dir=None, total_iterations=None):
+
+def update_experiment_status(
+    status, experiment_name=None, experiment_dir=None, total_iterations=None
+):
     """Update the experiment status with the current state."""
     status_tracker = get_experiment_status_tracker()
     status_tracker["status"] = status
     status_tracker["timestamp"] = datetime.now().isoformat()
-    
+
     if experiment_name:
         status_tracker["experiment_name"] = experiment_name
     if experiment_dir:
@@ -252,53 +257,51 @@ def update_experiment_status(status, experiment_name=None, experiment_dir=None, 
 
     return status_tracker
 
+
 def create_progress_tracker(progress_container, num_iterations):
     """Create and return a function to update progress tracking."""
     progress_bar = progress_container.progress(0)
     status_text = progress_container.empty()
-    
+
     def update_progress(iteration):
         # Set initial status on first update
         if iteration == 0:
             # Update the status
-            update_experiment_status(
-                STATUS_RUNNING, 
-                total_iterations=num_iterations
-            )
+            update_experiment_status(STATUS_RUNNING, total_iterations=num_iterations)
             return
-            
+
         if iteration > num_iterations:
             progress = 1.0
         else:
             progress = iteration / num_iterations if num_iterations > 0 else 1.0
-        
+
         progress_bar.progress(progress)
         status_text.text(f"Active Learning Iteration: {iteration}/{num_iterations}")
-        
+
         # Update the status
-        update_experiment_status(
-            STATUS_RUNNING, 
-            total_iterations=num_iterations
-        )
-    
+        update_experiment_status(STATUS_RUNNING, total_iterations=num_iterations)
+
     return update_progress
 
-def process_uploaded_datasets(train_dataset_path, test_dataset_path, output_dir, config, status):
+
+def process_uploaded_datasets(
+    train_dataset_path, test_dataset_path, output_dir, config, status
+):
     """Process uploaded datasets and update config.
-    
+
     Args:
         train_dataset_path: Path to the uploaded training dataset
         test_dataset_path: Path to the uploaded test dataset
         output_dir: Directory to save the processed dataset
         config: Configuration dictionary to update
         status: Streamlit status element for progress updates
-        
+
     Returns:
         Updated configuration dictionary
     """
     # Both files uploaded successfully
     status.info("Processing uploaded datasets...")
-    
+
     # Load train dataset
     if train_dataset_path.endswith(".csv"):
         train_dataset = Dataset.from_csv(train_dataset_path)
@@ -311,10 +314,8 @@ def process_uploaded_datasets(train_dataset_path, test_dataset_path, output_dir,
 
     # Add ID column if not present
     if "id" not in train_dataset.column_names:
-        train_dataset = train_dataset.add_column(
-            "id", list(range(len(train_dataset)))
-        )
-        
+        train_dataset = train_dataset.add_column("id", list(range(len(train_dataset))))
+
     # Load test dataset
     if test_dataset_path is not None:
         if test_dataset_path.endswith(".csv"):
@@ -326,28 +327,29 @@ def process_uploaded_datasets(train_dataset_path, test_dataset_path, output_dir,
                 f"Unsupported file format for test dataset: {test_dataset_path}"
             )
         if "id" not in test_dataset.column_names:
-            test_dataset = test_dataset.add_column(
-                "id", list(range(len(test_dataset)))
-            )
-        dataset_dict = DatasetDict(
-            {"train": train_dataset, "test": test_dataset}
-        )
+            test_dataset = test_dataset.add_column("id", list(range(len(test_dataset))))
+        dataset_dict = DatasetDict({"train": train_dataset, "test": test_dataset})
     else:
-        st.warning("No test dataset uploaded. Consider uploading the test dataset for better results.")
+        st.warning(
+            "No test dataset uploaded. Consider uploading the test dataset for better results."
+        )
         test_dataset = None
         dataset_dict = DatasetDict({"train": train_dataset})
-    
+
     dataset_path = os.path.join(output_dir, "dataset_dict")
     dataset_dict.save_to_disk(dataset_path)
 
     # Set the dataset in the config
     config["data"]["dataset"] = dataset_path
     config["data"]["unlabeled_data_split_name"] = UNLABELED_DATA_SPLIT_DEFAULT_NAME
-    config["data"]["test_split_name"] = TEST_DATA_SPLIT_DEFAULT_NAME if test_dataset is not None else None
+    config["data"]["test_split_name"] = (
+        TEST_DATA_SPLIT_DEFAULT_NAME if test_dataset is not None else None
+    )
 
     status.success("Uploaded datasets processed successfully!")
-    
+
     return config
+
 
 # Wrapper for run_active_learning to track progress
 def run_active_learning_with_progress(config, progress_callback=None):
@@ -358,19 +360,19 @@ def run_active_learning_with_progress(config, progress_callback=None):
             STATUS_RUNNING,
             experiment_name=config.get("experiment_name", "Active Learning Experiment"),
             experiment_dir=config.get("output_dir", None),
-            total_iterations=config["al"]["num_iterations"]
+            total_iterations=config["al"]["num_iterations"],
         )
-        
+
         # Call the progress callback immediately to set initial status
         if progress_callback:
             progress_callback(0)
-        
+
         # Run the actual experiment
         result = run_active_learning(config)
-        
+
         # Update status to completed
         update_experiment_status(STATUS_COMPLETED)
-        
+
         return result
     except KeyboardInterrupt:
         update_experiment_status(STATUS_CANCELLED)
@@ -378,6 +380,7 @@ def run_active_learning_with_progress(config, progress_callback=None):
     except Exception as e:
         update_experiment_status(STATUS_FAILED)
         raise
+
 
 def main():
     # Display header with project logo/title
@@ -394,32 +397,45 @@ def main():
             try:
                 experiment_dir = running_experiment["experiment_dir"]
                 # Check for iteration directories (iter_X) and find the highest X
-                iteration_dirs = [d for d in os.listdir(experiment_dir) 
-                                if os.path.isdir(os.path.join(experiment_dir, d)) 
-                                and d.startswith("iter_")]
-                
+                iteration_dirs = [
+                    d
+                    for d in os.listdir(experiment_dir)
+                    if os.path.isdir(os.path.join(experiment_dir, d))
+                    and d.startswith("iter_")
+                ]
+
                 if iteration_dirs:
                     # Extract iteration numbers from directory names
-                    iteration_numbers = [int(d.split("_")[1]) for d in iteration_dirs if d.split("_")[1].isdigit()]
+                    iteration_numbers = [
+                        int(d.split("_")[1])
+                        for d in iteration_dirs
+                        if d.split("_")[1].isdigit()
+                    ]
                     if iteration_numbers:
                         # Current iteration is the highest existing iter_X + 1
-                        running_experiment["current_iteration"] = max(iteration_numbers) + 1
+                        running_experiment["current_iteration"] = (
+                            max(iteration_numbers) + 1
+                        )
                     else:
                         running_experiment["current_iteration"] = 0
                 else:
                     running_experiment["current_iteration"] = 0
             except (FileNotFoundError, PermissionError, OSError):
                 # In case of any file system errors, keep the current value
-                import pdb; pdb.set_trace()
+                import pdb
+
+                pdb.set_trace()
 
         st.warning(
             f"⚠️ An experiment '{running_experiment.get('experiment_name', 'Unknown')}' is already running! "
             f"Current iteration: {running_experiment.get('current_iteration', '?')}/{running_experiment.get('total_iterations', '?')}. "
             f"The experiment was most likely started by one of the reviewers, so kindly wait for it to finish."
         )
-        
+
         # Show option to force reset the status (in case of stale status)
-        if st.button("⚠️ Reset experiment status (Use only if you're sure no experiment is running)"):
+        if st.button(
+            "⚠️ Reset experiment status (Use only if you're sure no experiment is running)"
+        ):
             update_experiment_status(STATUS_IDLE)
             st.success("Status reset. Refresh the page to configure a new experiment.")
             st.stop()
@@ -429,15 +445,15 @@ def main():
             col1, col2, col3 = st.columns(3)
             with col1:
                 if st.button("📊 View Metrics", use_container_width=True):
-                    st.switch_page("./pages/1_Metrics.py")
+                    st.switch_page("1_Metrics")
             with col2:
                 if st.button("🏷️ View Labeled Examples", use_container_width=True):
-                    st.switch_page("./pages/2_Labeled_examples.py")
+                    st.switch_page("2_Labeled_examples")
             with col3:
                 if st.button("👩‍🎨 Annotate Examples", use_container_width=True):
-                    st.switch_page("./pages/3_Annotation.py")
+                    st.switch_page("3_Annotation")
             st.stop()
-            
+
     st.markdown(
         """
     <div class='info-box'>
@@ -573,10 +589,10 @@ def main():
         labeller = st.radio(
             "👨‍💼 Labeller",
             [
+                "Golden (only for benchmarking)",
                 "Open-source / Custom LLM",
                 "API LLM",
                 "Human",
-                "Golden (only for benchmarking)",
             ],
             help="Select the type of labeller to use for data annotation",
         )
@@ -592,12 +608,29 @@ def main():
                 help="Cost paid to human annotators per example",
             )
         elif labeller == "custom_llm":
-            model_checkpoint = st.text_input(
+            labeller_checkpoint = st.text_input(
                 "🤖 Model checkpoint from HuggingFace",
-                value="Qwen/QwQ-32B",
+                value="Qwen/Qwen3-32B",
                 help="HuggingFace model ID for the custom LLM",
             )
         elif labeller == "api_llm":
+            # Add data privacy disclaimer
+            st.markdown(
+                """
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                    <h4 style="color: #856404; margin-top: 0; display: flex; align-items: center;">
+                        ⚠️ Data Privacy Notice
+                    </h4>
+                    <p style="color: #856404; margin-bottom: 0; font-size: 0.9rem;">
+                        <strong>Important:</strong> When using API-based labellers (OpenAI, Anthropic, etc.), your dataset will be sent to external services for processing. 
+                        Please ensure you have the necessary permissions and that your data complies with the respective service providers' terms of use and privacy policies.
+                        Consider using local/custom models if your data contains sensitive or proprietary information.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
             col1, col2 = st.columns(2)
             with col1:
                 provider = st.radio(
@@ -664,7 +697,7 @@ def main():
             # Dataset input
             dataset = st.text_input(
                 "📚 Dataset or path to data",
-                value="SpeedOfMagic/gigaword_tiny",
+                value="Yale-LILY/aeslc",
                 help="HuggingFace dataset ID or local path to dataset",
             )
 
@@ -788,13 +821,13 @@ def main():
         with col1:
             input_field = st.text_input(
                 "📥 Input field name",
-                value="document",
+                value="email_body",
                 help="Name of the field containing input text in the dataset",
             )
         with col2:
             reference_field = st.text_input(
                 "📤 Reference field name",
-                value="summary",
+                value="subject_line",
                 help="Name of the field containing reference output in the dataset",
             )
 
@@ -822,7 +855,7 @@ def main():
         with col1:
             model_checkpoint = st.text_input(
                 "🤖 Model checkpoint",
-                value="Qwen/Qwen2.5-1.5B-Instruct",
+                value="Qwen/Qwen3-1.7B",
                 help="HuggingFace model ID for generation",
             )
 
@@ -1142,9 +1175,11 @@ def main():
 
             # Check again if an experiment is already running
             if check_experiment_status():
-                st.error("Another experiment is already running. Please wait for it to complete.")
+                st.error(
+                    "Another experiment is already running. Please wait for it to complete."
+                )
                 st.stop()
-                
+
             # Create a progress container outside of any spinner
             progress_container = st.container()
             with progress_container:
@@ -1157,7 +1192,7 @@ def main():
                 """,
                     unsafe_allow_html=True,
                 )
-                
+
                 # Add progress tracking elements
                 progress_bar = st.progress(0)
                 progress_status = st.empty()
@@ -1218,14 +1253,16 @@ def main():
                         # Process uploaded datasets if available
                         if train_dataset_path is not None:
                             config = process_uploaded_datasets(
-                                train_dataset_path=train_dataset_path, 
-                                test_dataset_path=test_dataset_path, 
-                                output_dir=output_dir, 
-                                config=config, 
-                                status=status
+                                train_dataset_path=train_dataset_path,
+                                test_dataset_path=test_dataset_path,
+                                output_dir=output_dir,
+                                config=config,
+                                status=status,
                             )
                         else:
-                            st.error("No training dataset uploaded. Please upload a training dataset.")
+                            st.error(
+                                "No training dataset uploaded. Please upload a training dataset."
+                            )
                             st.stop()
                     else:
                         # Using standard dataset (HuggingFace or local path)
@@ -1266,7 +1303,9 @@ def main():
                             ] = price_input_per_example
                     elif labeller == "custom_llm":
                         if "model_checkpoint" in locals():
-                            config["labeller"]["model"]["checkpoint"] = model_checkpoint
+                            config["labeller"]["model"][
+                                "checkpoint"
+                            ] = labeller_checkpoint
                     elif labeller == "api_llm":
                         config["labeller"]["api_key"] = api_key
                         config["labeller"]["provider"] = provider
@@ -1370,8 +1409,7 @@ def main():
                         )
                     # Create progress tracking callback
                     progress_update_callback = create_progress_tracker(
-                        progress_container, 
-                        num_iterations
+                        progress_container, num_iterations
                     )
 
                     # Clear the status before running the experiment
@@ -1380,13 +1418,12 @@ def main():
                     # Run the active learning experiment with progress tracking
                     with st.spinner("Running active learning experiment..."):
                         run_active_learning_with_progress(
-                            config, 
-                            progress_callback=progress_update_callback
+                            config, progress_callback=progress_update_callback
                         )
 
                     # Update status to completed
                     update_experiment_status(STATUS_COMPLETED)
-                    
+
                     # Show success indicators after completion
                     st.balloons()
 
@@ -1401,24 +1438,24 @@ def main():
                         nav_col1, nav_col2, nav_col3 = st.columns(3)
                         with nav_col1:
                             if st.button("📊 View Metrics", use_container_width=True):
-                                st.switch_page("1_Metrics.py")
+                                st.switch_page("1_Metrics")
                         with nav_col2:
                             if st.button(
                                 "🏷️ View Labeled Examples", use_container_width=True
                             ):
-                                st.switch_page("2_Labeled_examples.py")
+                                st.switch_page("2_Labeled_examples")
                         with nav_col3:
                             if st.button(
                                 "👩‍🎨 Annotate Examples", use_container_width=True
                             ):
-                                st.switch_page("3_Annotation.py")
+                                st.switch_page("3_Annotation")
             except Exception as e:
                 # Update status to failed
                 update_experiment_status(STATUS_FAILED)
-                st.error(f"An error occurred: {str(e)}")
-                import traceback
-
-                st.code(traceback.format_exc(), language="python")
+                # st.error(f"An error occurred: {str(e)}")
+                # import sys, pdb
+                # exc_type, exc_value, exc_traceback = sys.exc_info()
+                # pdb.post_mortem(exc_traceback)
         elif is_valid_required_performance:
             st.error("❌ You didn't fill one of the required arguments.")
 

@@ -20,11 +20,12 @@ al:
     budget:
 
 model:
-    checkpoint:  Qwen/Qwen2.5-0.5B-Instruct
+    checkpoint: Qwen/Qwen3-0.6B
     quantize: False
     model_max_length: ${multiply_with_few_shot:${data.input_max_length},${data.few_shot.count}}
     dtype: bfloat16
     save_in_fp_32: false
+    assistant_response_start: "<think>\n\n</think>\n\n"
     peft:
         use: True
         r: 64

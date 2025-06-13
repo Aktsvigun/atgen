@@ -1,0 +1,17 @@
+dataset: str or list[str]
+few_shot_examples: list[dict[str, str]]
+fetch_kwargs: {}
+few_shot:
+  count: 0
+unlabeled_data_split_name: str
+test_split_name: str
+input_column_name: str
+input_max_length: int
+output_column_name: str or list[str]
+output_max_length: int
+test_subset_size: int
+train_subset_size: int
+system_prompt: str
+assistant_response_start: str
+is_in_conversational_format: bool
+use_test_benchmark: bool
