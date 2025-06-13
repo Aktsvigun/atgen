@@ -1,0 +1,14 @@
+dataset: ['mandarjoshi/trivia_qa', 'rc.wikipedia']
+input_column_name: 'question'
+output_column_name: {'train': ['answer', 'value'], 'test': ['answer', 'aliases']}
+unlabeled_data_split_name: train
+test_split_name: validation
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 1024
+output_max_length: 20
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: "Please answer the question very laconically:\n\n"
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false

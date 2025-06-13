@@ -1,6 +1,6 @@
-from omegaconf import DictConfig
+from typing import Optional
 
-from ..constants import MESSAGES_COLUMN_NAME
+from ..constants import MESSAGES_COLUMN_NAME, OUTPUT_FIELD_PURPOSE_TRAIN
 
 
 def get_preprocess_function(
@@ -11,6 +11,7 @@ def get_preprocess_function(
     is_in_conversational_format: bool = False,
     input_column_name: str = "input",
     output_column_name: str = "output",
+    assistant_response_start: Optional[str] = None,
 ):
     """
     Creates and returns an appropriate preprocessing function based on:
@@ -36,9 +37,7 @@ def get_preprocess_function(
                     # Copy the first few-shot message and prepend system prompt
                     first_fs = few_shot_messages[0].copy()
                     first_fs["content"] = system_prompt + "\n\n" + first_fs["content"]
-                    messages.append(first_fs)
-                    # Add remaining few-shot messages
-                    messages.extend(few_shot_messages[1:])
+                    messages = [first_fs] + few_shot_messages[1:]
                 else:
                     # No few-shot messages
                     if is_in_conversational_format:
@@ -46,6 +45,9 @@ def get_preprocess_function(
                         conv_messages = instance[input_column_name]
                         conv_messages[0]["content"] = (
                             system_prompt + "\n\n" + conv_messages[0]["content"]
+                        )
+                        conv_messages = _maybe_add_assistant_response_start(
+                            conv_messages, assistant_response_start
                         )
                         return {MESSAGES_COLUMN_NAME: conv_messages}
                     else:
@@ -66,10 +68,11 @@ def get_preprocess_function(
 
                 if is_in_conversational_format:
                     # Return the messages directly if in conversational format
-                    return {
-                        MESSAGES_COLUMN_NAME: few_shot_messages
-                        + instance[input_column_name]
-                    }
+                    messages = few_shot_messages + instance[input_column_name]
+                    messages = _maybe_add_assistant_response_start(
+                        messages, assistant_response_start
+                    )
+                    return {MESSAGES_COLUMN_NAME: messages}
                 else:
                     # Add user message
                     messages.append(
@@ -79,11 +82,23 @@ def get_preprocess_function(
             # Handle different split types
             if is_in_conversational_format:
                 # For conversational format, we've already handled this above
-                return {MESSAGES_COLUMN_NAME: messages + instance[input_column_name]}
+                messages += instance[input_column_name]
+                messages = _maybe_add_assistant_response_start(
+                    messages, assistant_response_start
+                )
+                return {MESSAGES_COLUMN_NAME: messages}
             elif split == "train":
                 # For training, add the assistant's response
+                if assistant_response_start:
+                    assistant_message = (
+                        assistant_response_start + instance[output_column_name]
+                    )
+                else:
+                    assistant_message = instance[output_column_name]
+                messages.append({"role": "assistant", "content": assistant_message})
+            elif split == "test" and assistant_response_start:
                 messages.append(
-                    {"role": "assistant", "content": instance[output_column_name]}
+                    {"role": "assistant", "content": assistant_response_start}
                 )
 
             return {MESSAGES_COLUMN_NAME: messages}
@@ -104,7 +119,11 @@ def get_preprocess_function(
             # Handle different formats
             if is_in_conversational_format:
                 # For conversational format, append input messages to existing ones
-                return {MESSAGES_COLUMN_NAME: messages + instance[input_column_name]}
+                messages += instance[input_column_name]
+                messages = _maybe_add_assistant_response_start(
+                    messages, assistant_response_start
+                )
+                return {MESSAGES_COLUMN_NAME: messages}
             else:
                 # Add user message
                 messages.append(
@@ -113,10 +132,26 @@ def get_preprocess_function(
 
                 # For training, add the assistant's response
                 if split == "train":
+                    if assistant_response_start:
+                        assistant_message = (
+                            assistant_response_start + instance[output_column_name]
+                        )
+                    else:
+                        assistant_message = instance[output_column_name]
+                    messages.append({"role": "assistant", "content": assistant_message})
+                elif split == "test" and assistant_response_start:
                     messages.append(
-                        {"role": "assistant", "content": instance[output_column_name]}
+                        {"role": "assistant", "content": assistant_response_start}
                     )
 
             return {MESSAGES_COLUMN_NAME: messages}
 
     return preprocess_fn
+
+
+def _maybe_add_assistant_response_start(
+    messages: list[dict[str, str]], assistant_response_start: Optional[str]
+) -> list[dict[str, str]]:
+    if assistant_response_start:
+        messages[-1]["content"] = assistant_response_start + messages[-1]["content"]
+    return messages

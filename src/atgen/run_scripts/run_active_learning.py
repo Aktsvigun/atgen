@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Union
 import logging
 from atgen.utils.main_decorator import main_decorator
-from atgen.utils.constants import DEFAULT_CONFIG_NAME
+from atgen.utils.constants import (
+    DEFAULT_CONFIG_NAME,
+    UNLABELED_DATA_SPLIT_DEFAULT_NAME,
+    TEST_DATA_SPLIT_DEFAULT_NAME,
+    OUTPUT_FIELD_PURPOSE_TRAIN,
+    OUTPUT_FIELD_PURPOSE_TEST,
+)
 
 log = logging.getLogger()
 
@@ -17,12 +23,15 @@ log = logging.getLogger()
 @main_decorator
 def run_active_learning(config, workdir: Union[str, Path]):
     from transformers import set_seed
-    from datasets import concatenate_datasets
+    from datasets import concatenate_datasets, Dataset
 
     from atgen.metrics.compute_metrics import compute_metrics
-    from atgen.utils.data.load_data import load_data
-    from atgen.utils.data.prepare_conversational_data import prepare_conversational_data
-    from atgen.utils.data.maybe_get_few_shot_examples import maybe_get_few_shot_examples
+    from atgen.utils.data import (
+        load_data,
+        prepare_conversational_data,
+        maybe_get_few_shot_examples,
+        get_output_column_name_for_phase,
+    )
     from atgen.utils.load_model_tokenizer import load_model_tokenizer
     from atgen.utils.prepare_model_for_training import prepare_model_for_training
     from atgen.utils.training_utils import get_trainer
@@ -35,6 +44,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
     from atgen.utils.get_initial_labeled_data import (
         get_initial_labeled_data_with_few_shot,
     )
+    from atgen.strategies.base_strategy import BaseStrategy
     from atgen.labellers.base_labeller import BaseLabeler
     from atgen.utils.check_performance_metrics import (
         check_performance_against_requirements,
@@ -43,8 +53,9 @@ def run_active_learning(config, workdir: Union[str, Path]):
     seed = config.seed
     cache_dir = config.cache_dir
     input_column_name = config.data.input_column_name
-    output_column_name = config.data.output_column_name
     dev_split_size = config.training.dev_split_size
+    output_column_name_train = config.data.train_output_column_name
+    output_column_name_test = config.data.test_output_column_name
 
     model_name = config.model.checkpoint
 
@@ -62,7 +73,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
 
     # Initialize variables for tracking available metrics
     available_metrics = {}
-    metrics_availability_checked = False
+    is_metrics_availability_checked = False
 
     has_test = (
         config.data.test_split_name is not None and config.data.test_split_name != ""
@@ -89,14 +100,14 @@ Prompt:\n{config.data.system_prompt}
     log.info("Loading data.")
     unlabeled_data = load_data(
         data_config=config.data,
-        split=config.data.unlabeled_data_split_name,
+        split=UNLABELED_DATA_SPLIT_DEFAULT_NAME,
         cache_dir=config.cache_dir,
         seed=seed,
     )
     if has_test:
         test_data = load_data(
             data_config=config.data,
-            split=config.data.test_split_name,
+            split=TEST_DATA_SPLIT_DEFAULT_NAME,
             cache_dir=config.cache_dir,
             seed=seed,
         )
@@ -107,7 +118,7 @@ Prompt:\n{config.data.system_prompt}
     )
 
     log.info("Loading AL strategy.")
-    al_strategy = get_strategy(
+    al_strategy: BaseStrategy = get_strategy(
         config.al.strategy,
         subsample_size=config.al.subsample_size,
         unlabeled_pool=unlabeled_data[input_column_name],
@@ -124,7 +135,7 @@ Prompt:\n{config.data.system_prompt}
     # TODO: unsure whether need to log here since may be confusing for a human labeller
     labeller: BaseLabeler = get_labeller(
         config.labeller,
-        output_column_name,
+        output_column_name=output_column_name_train,
         cache_dir=cache_dir,
         budget=budget,
         workdir=workdir,  # if labeller is a human
@@ -150,10 +161,10 @@ Prompt:\n{config.data.system_prompt}
                 lambda x: x["id"] not in set(labeled_ids)
             )
         else:
-            query_ids = al_strategy(
+            query_ids: list[str] = al_strategy(
                 model=model,
                 tokenizer=tokenizer,
-                unlabeled_pool=unlabeled_data.remove_columns(output_column_name),
+                unlabeled_pool=unlabeled_data.remove_columns(output_column_name_train),
                 labeled_pool=None,
                 num_to_label=al_query_size,
                 batch_size=config.inference.batch_size,
@@ -185,7 +196,7 @@ Prompt:\n{config.data.system_prompt}
         labeled_data = unlabeled_data.select(range(0, 0))
         labeled_ids = []
 
-    unlabeled_data = prepare_conversational_data(
+    unlabeled_data: Dataset = prepare_conversational_data(
         dataset=unlabeled_data,
         data_config=config.data,
         split="test",
@@ -194,16 +205,17 @@ Prompt:\n{config.data.system_prompt}
     )
 
     if has_test:
-        test_data = prepare_conversational_data(
-            dataset=test_data,
-            data_config=config.data,
-            split="test",
-            few_shot_examples=few_shot_examples,
-            model_name=model_name,
-        )
+        if not config.data.use_test_benchmark:
+            test_data: Dataset = prepare_conversational_data(
+                dataset=test_data,
+                data_config=config.data,
+                split="test",
+                few_shot_examples=few_shot_examples,
+                model_name=model_name,
+            )
         # Evaluate the initial model before any training
         if init_query_size_is_positive and config.al.evaluate_zero_iteration:
-            generations = generate(
+            generations: list[str] = generate(
                 config.inference,
                 data=test_data,
                 model=model,
@@ -215,20 +227,20 @@ Prompt:\n{config.data.system_prompt}
             if os.path.exists(save_dir):
                 rmtree(save_dir)
 
-            metrics = compute_metrics(
+            metrics: dict[str, float] = compute_metrics(
                 generated_texts=generations,
-                reference_texts=test_data[output_column_name],
+                reference_texts=test_data[output_column_name_test],
                 original_texts=test_data[input_column_name],
                 config=config.evaluation,
                 cache_dir=cache_dir,
             )
 
             # Check required performance metrics
-            is_performance_reached, metrics_availability_checked, available_metrics = (
+            is_performance_reached, is_metrics_availability_checked, available_metrics = (
                 check_performance_against_requirements(
                     metrics=metrics,
                     required_performance_dict=required_performance_dict,
-                    metrics_availability_checked=metrics_availability_checked,
+                    is_metrics_availability_checked=is_metrics_availability_checked,
                     available_metrics=available_metrics,
                 )
             )
@@ -284,7 +296,7 @@ Prompt:\n{config.data.system_prompt}
 
         # Set seed for reproducibility
         set_seed(seed)
-        trainer = get_trainer(
+        trainer: SFTTrainer = get_trainer(
             config=config,
             model=model,
             tokenizer=tokenizer,
@@ -314,7 +326,7 @@ Prompt:\n{config.data.system_prompt}
             if dev_split_size > 0:
                 test_data = eval_data
         else:
-            generations = generate(
+            generations: list[str] = generate(
                 config.inference,
                 data=test_data,
                 model=model,
@@ -326,20 +338,20 @@ Prompt:\n{config.data.system_prompt}
             if os.path.exists(save_dir):
                 rmtree(save_dir)
 
-            metrics = compute_metrics(
+            metrics: dict[str, float] = compute_metrics(
                 generated_texts=generations,
-                reference_texts=test_data[output_column_name],
+                reference_texts=test_data[output_column_name_test],
                 original_texts=test_data[input_column_name],
                 config=config.evaluation,
                 cache_dir=cache_dir,
             )
 
             # Check required performance metrics
-            is_performance_reached, metrics_availability_checked, available_metrics = (
+            is_performance_reached, is_metrics_availability_checked, available_metrics = (
                 check_performance_against_requirements(
                     metrics=metrics,
                     required_performance_dict=required_performance_dict,
-                    metrics_availability_checked=metrics_availability_checked,
+                    is_metrics_availability_checked=is_metrics_availability_checked,
                     available_metrics=available_metrics,
                 )
             )
@@ -357,22 +369,22 @@ Prompt:\n{config.data.system_prompt}
         # Make AL query for the next round if we have not run out of iterations
         if al_iter != num_al_iterations + 1:
             log.info(f"Making AL query at iteration {al_iter}.")
-            query_ids = al_strategy(
+            query_ids: list[str] = al_strategy(
                 model=model,
                 tokenizer=tokenizer,
-                unlabeled_pool=unlabeled_data.remove_columns(output_column_name),
+                unlabeled_pool=unlabeled_data.remove_columns(output_column_name_train),
                 labeled_pool=labeled_data,
                 num_to_label=al_query_size,
                 batch_size=config.inference.batch_size,
                 max_new_tokens=config.inference.max_new_tokens,
             )
 
-            query = unlabeled_data.filter(lambda x: x["id"] in query_ids)
-            unlabeled_data = unlabeled_data.filter(lambda x: x["id"] not in query_ids)
-            labeled_query = labeller(query)
+            query: Dataset = unlabeled_data.filter(lambda x: x["id"] in query_ids)
+            unlabeled_data: Dataset = unlabeled_data.filter(lambda x: x["id"] not in query_ids)
+            labeled_query: Dataset = labeller(query)
             if labeller.is_out_of_budget:
                 log.info(f"Labeler ran out of budget at iteration {al_iter}.")
-            labeled_data = concatenate_datasets([labeled_data, labeled_query])
+            labeled_data: Dataset = concatenate_datasets([labeled_data, labeled_query])
             labeled_ids += query_ids
 
             log.info(f"Saving labeled data at iteration #{al_iter}.")

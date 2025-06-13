@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Optional, Union
 import numpy as np
 from evaluate import EvaluationModule, load
 from scipy.spatial.distance import jensenshannon
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 import logging
 
 from datasets import Dataset
@@ -18,16 +18,16 @@ from transformers import (
 )
 
 from .unieval import SumEvaluator, convert_to_json
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 from ..utils.generate import generate
-from ..utils.data.prepare_conversational_data import prepare_conversational_data
+from ..utils.data import prepare_conversational_data, get_output_column_name_for_phase
 from ..utils.constants import MESSAGES_COLUMN_NAME
 
 
 log = logging.getLogger()
 
 
-class HadasStrategy(Strategy):
+class HadasStrategy(BaseStrategy):
     def __init__(
         self,
         subsample_size: int | float = -1,
@@ -81,7 +81,7 @@ class HadasStrategy(Strategy):
             unlabeled_pool=unlabeled_pool,
             labeled_pool=labeled_pool,
             input_column_name=self.data_config.input_column_name,
-            output_column_name=self.data_config.output_column_name,
+            output_column_name=self.data_config.train_output_column_name,
             num_to_label=num_to_label,
             inference_config=self.inference_config,
             model_config=self.model_config,
@@ -221,13 +221,13 @@ def hadas(
     h_halu = (U_unlabeled @ weights).flatten().numpy()
 
     U_labeled = hallucination_distribution(
-        entailment_model,
-        entailment_tokenizer,
-        unieval,
-        bertscore,
-        labeled_pool[input_column_name],
-        labeled_pool[output_column_name],
-        inference_config.batch_size,
+        entailment_model=entailment_model,
+        entailment_tokenizer=entailment_tokenizer,
+        unieval=unieval,
+        bertscore=bertscore,
+        documents=labeled_pool[input_column_name],
+        summaries=labeled_pool[output_column_name],
+        batch_size=inference_config.batch_size,
     )
     h_div = np.array(
         [

@@ -8,7 +8,7 @@ from datasets import Dataset
 from omegaconf import DictConfig
 
 from torch.utils.data import DataLoader
-from torch import bfloat16, float16, cuda, no_grad, LongTensor
+from torch import bfloat16, cuda
 from tqdm import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from vllm import LLM
@@ -21,14 +21,18 @@ from .constants import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     MESSAGES_COLUMN_NAME,
-    DEEPSEEK_R1_END_REASONING_TOKEN,
 )
 
 from .training_utils import _get_data_collator
 from .find_response_token_ids_in_text import find_response_token_ids_in_text
+from .post_process_generations import post_process_generations
 
 
 log = logging.getLogger()
+
+VLLM_FRAMEWORK = "vllm"
+SGLANG_FRAMEWORK = "sglang"
+TRANSFORMERS_FRAMEWORK = "transformers"
 
 
 def generate_vllm(
@@ -72,12 +76,22 @@ def generate_vllm(
     gc.collect()
     cuda.empty_cache()
 
-    params = SamplingParams(
+    sampling_params = SamplingParams(
         temperature=inference_config.get("temperature", DEFAULT_TEMPERATURE),
         seed=42,  # TODO: make arbitrary
         max_tokens=inference_config.max_new_tokens,
         top_p=inference_config.get("top_p", DEFAULT_TOP_P),
     )
+    if data_config.assistant_response_start:
+        generation_params = {
+            "add_generation_prompt": False,
+            "continue_final_message": True,
+        }
+    else:
+        generation_params = {
+            "add_generation_prompt": True,
+            "continue_final_message": False,
+        }
 
     generations = []
     num_batches = ceil(len(data) / inference_config.batch_size)
@@ -85,30 +99,23 @@ def generate_vllm(
         batch = data[
             i * inference_config.batch_size : (i + 1) * inference_config.batch_size
         ][MESSAGES_COLUMN_NAME]
-        out = llm_runner.chat(batch, params, use_tqdm=False)
+        out = llm_runner.chat(
+            batch, sampling_params, use_tqdm=False, **generation_params
+        )
         batch_generations = [x.outputs[0].text for x in out]
         generations += batch_generations
 
-    # Remove reasoning tokens from DeepSeek-R1
-    if "deepseek-r1" in llm_runner.llm_engine.model_config.model:
-        for i, generation in enumerate(generations):
-            generations[i] = DEEPSEEK_R1_END_REASONING_TOKEN.join(
-                generation.split(DEEPSEEK_R1_END_REASONING_TOKEN)[1:]
-            ).strip()
-
+    generations = post_process_generations(
+        generations=generations,
+        data_config=data_config,
+        model_name=llm_runner.llm_engine.model_config.model,
+        framework=VLLM_FRAMEWORK
+    )
     if delete_vllm_after_inference:
         del llm_runner
         gc.collect()
         cuda.empty_cache()
     return generations
-
-
-def generate_sglang() -> list[str]:
-    """
-    Function for generating with the SGLang framework.
-    Requires either model + tokenizer or the path to the saved model and tokenizer.
-    """
-    pass
 
 
 def generate_sglang(
@@ -198,6 +205,12 @@ def generate_sglang(
         batch_generations = [result.outputs["response"] for result in batch_results]
         generations += batch_generations
 
+    generations = post_process_generations(
+        generations=generations,
+        data_config=data_config,
+        model_name=model_path,
+        framework=SGLANG_FRAMEWORK
+    )
     # Clean up
     engine.shutdown()
     return generations
@@ -216,7 +229,7 @@ def generate_transformers(
         data = data.map(
             tokenize_conversational_example,
             batched=False,
-            fn_kwargs={"tokenizer": tokenizer},
+            fn_kwargs={"tokenizer": tokenizer, "data_config": data_config},
         )
 
     data_collator = _get_data_collator(
@@ -237,31 +250,36 @@ def generate_transformers(
         FastLanguageModel.for_inference(model)
 
     generations = []
-    with no_grad():
-        for batch in tqdm(dataloader):
-            try:
-                out = model.generate(
-                    batch["input_ids"].to(model.device),
-                    attention_mask=batch["attention_mask"].to(model.device),
-                    max_new_tokens=inference_config.max_new_tokens,
-                    temperature=inference_config.get(
-                        "temperature", DEFAULT_TEMPERATURE
-                    ),
-                    top_p=inference_config.get("top_p", DEFAULT_TOP_P),
-                    return_dict_in_generate=True,
-                    output_scores=True,
+    for batch in tqdm(dataloader):
+        try:
+            out = model.generate(
+                batch["input_ids"].to(model.device),
+                attention_mask=batch["attention_mask"].to(model.device),
+                max_new_tokens=inference_config.max_new_tokens,
+                temperature=inference_config.get(
+                    "temperature", DEFAULT_TEMPERATURE
+                ),
+                top_p=inference_config.get("top_p", DEFAULT_TOP_P),
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+            outputs_only = []
+            for output in out.sequences:
+                seq_only = find_response_token_ids_in_text(
+                    output.tolist(), data_collator.response_token_ids
                 )
-                outputs_only = []
-                for output in out.sequences:
-                    seq_only = find_response_token_ids_in_text(
-                        output.tolist(), data_collator.response_token_ids
-                    )
-                    outputs_only.append(tokenizer.decode(seq_only, True).strip())
-                generations += outputs_only
-            except Exception as e:
-                print(f"Error in model.generate: {e}")
-                # Add empty strings for this batch to maintain alignment with input data
-                generations += [""] * len(batch["input_ids"])
+                outputs_only.append(tokenizer.decode(seq_only, True).strip())
+            generations += outputs_only
+        except Exception as e:
+            print(f"Error in model.generate: {e}")
+            # Add empty strings for this batch to maintain alignment with input data
+            generations += [""] * len(batch["input_ids"])
+    generations = post_process_generations(
+        generations=generations,
+        data_config=data_config,
+        model_name=model.name_or_path,
+        framework=TRANSFORMERS_FRAMEWORK
+    )
     return generations
 
 
@@ -276,7 +294,7 @@ def generate(
     **kwargs,
 ) -> list[str]:
     framework = inference_config.framework
-    if framework == "vllm":
+    if framework == VLLM_FRAMEWORK:
         return generate_vllm(
             inference_config=inference_config,
             data=data,
@@ -286,7 +304,7 @@ def generate(
             data_config=data_config,
             **kwargs,
         )
-    elif framework == "transformers":
+    elif framework == TRANSFORMERS_FRAMEWORK:
         return generate_transformers(
             inference_config=inference_config,
             data=data,
@@ -297,7 +315,7 @@ def generate(
             model_config=model_config,
             **kwargs,
         )
-    elif framework == "sglang":
+    elif framework == SGLANG_FRAMEWORK:
         return generate_sglang(
             inference_config=inference_config,
             data=data,
@@ -313,8 +331,11 @@ def generate(
 
 
 def tokenize_conversational_example(
-    example: dict[str, Any], tokenizer: PreTrainedTokenizer
+    example: dict[str, Any], tokenizer: PreTrainedTokenizer, data_config: DictConfig
 ) -> dict[str, list[int]]:
-    input_ids = tokenizer.apply_chat_template(example["messages"])
+    if data_config.assistant_response_start:
+        input_ids = tokenizer.apply_chat_template(example["messages"], continue_final_message=True)
+    else:
+        input_ids = tokenizer.apply_chat_template(example["messages"], add_generation_prompt=True)
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}

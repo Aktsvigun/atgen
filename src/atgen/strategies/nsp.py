@@ -1,4 +1,4 @@
-from .base_strategy import Strategy
+from .base_strategy import BaseStrategy
 
 from typing import Union
 import numpy as np
@@ -6,7 +6,7 @@ from datasets import Dataset
 from transformers import PreTrainedModel
 
 
-class NSPStrategy(Strategy):
+class NSPStrategy(BaseStrategy):
     def __init__(self):
         super().__init__()
 

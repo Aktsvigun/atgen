@@ -10,3 +10,4 @@ output_max_length: 20
 system_prompt: "Write a summary for the article in lowercase."
 test_subset_size: 100
 train_subset_size: 100
+use_test_benchmark: false

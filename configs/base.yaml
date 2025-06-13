@@ -30,11 +30,12 @@ al:
     budget:
 
 model:
-    checkpoint: Qwen/Qwen2.5-1.5B-Instruct
+    checkpoint: Qwen/Qwen3-1.7B
     quantize: False
     model_max_length: ${multiply_with_few_shot:${data.input_max_length},${data.few_shot.count}}
     dtype: bfloat16
     save_in_fp_32: false
+    assistant_response_start: "<think>\n\n</think>\n\n"
     peft:
         use: True
         r: 16
@@ -80,7 +81,7 @@ evaluation:
     provider: openrouter
     base_url: https://openrouter.ai/api/v1
     api_key:
-    model: anthropic/claude-3-7-sonnet
+    model: nebius/Qwen/Qwen3-235B-A22B
     deepeval_threshold: 0.5
     deepeval_include_reason: False
     deepeval_strict_mode: False
