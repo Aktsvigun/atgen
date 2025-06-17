@@ -32,6 +32,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
         maybe_get_few_shot_examples,
         get_output_column_name_for_phase,
     )
+    from atgen.utils.installers import install_spacy, install_nltk
     from atgen.utils.load_model_tokenizer import load_model_tokenizer
     from atgen.utils.prepare_model_for_training import prepare_model_for_training
     from atgen.utils.training_utils import get_trainer
@@ -49,6 +50,10 @@ def run_active_learning(config, workdir: Union[str, Path]):
     from atgen.utils.check_performance_metrics import (
         check_performance_against_requirements,
     )
+
+    # TODO Figure out how to stop downloading it every time
+    install_spacy()
+    install_nltk()
 
     seed = config.seed
     cache_dir = config.cache_dir

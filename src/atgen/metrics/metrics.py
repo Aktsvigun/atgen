@@ -62,7 +62,7 @@ ALIGNSCORE_CHECKPOINT_PATH = os.getenv(
     # Going up 3 levels from metrics.py: src/atgen/metrics -> repository root
     os.path.join(
         Path(__file__).parents[3],
-        "external_metrics/AlignScore/model/AlignScore-base.ckpt",
+        "cache/AlignScore-base.ckpt",
     ),
 )
 

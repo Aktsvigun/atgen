@@ -21,21 +21,7 @@ A comprehensive toolkit for applying active learning techniques to natural langu
 
 ## 🔧 Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Aktsvigun/atgen.git
-   cd atgen
-   ```
-
-2. Run the installation script:
-   ```bash
-   bash install.sh
-   ```
-
-   This will install:
-   - All required Python packages
-   - External metrics (submodlib, AlignScore)
-   - Required NLP resources
+`pip install atgen`
 
 ## 🚀 Usage
 
@@ -115,4 +101,4 @@ If you use this toolkit in your research, please cite:
   url = {https://github.com/Aktsvigun/atgen},
   year = {2025},
 }
-``` 
+```
