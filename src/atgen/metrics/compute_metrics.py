@@ -1,6 +1,9 @@
+import string
 from time import time
 import logging
+from typing import Literal, Optional
 from omegaconf import DictConfig
+import re
 
 import numpy as np
 from evaluate import load
@@ -24,6 +27,7 @@ def compute_metrics(
     generated_texts,
     reference_texts,
     original_texts,
+    task: Literal["summarization", "open-qa", "multi-choice-qa", "translation", "math"],
     config: DictConfig,
     cache_dir: str = "cache",
 ) -> dict[str, float]:
@@ -34,6 +38,7 @@ def compute_metrics(
         generated_texts: List of generated texts to evaluate
         reference_texts: List of reference texts (ground truth) or list of lists of reference texts
         original_texts: List of source texts
+        task: Task type (summarization, open-qa, multi-choice-qa, translation)
         config: Configuration for evaluation
             - additional_metrics: List of additional metrics to use. Options include:
                 - "bartscore": BARTScore metrics
@@ -71,25 +76,35 @@ def compute_metrics(
         metric = AnswerRelevanceMetric(model=llm)
         ```
     """
-    # Load metrics that are always used
-    sacrebleu = load("sacrebleu", cache_dir=cache_dir)
-    rouge = load("rouge", cache_dir=cache_dir)
+    if task == "multi-choice-qa":
+        metrics_to_calculate = ["exact_match"] + list(config.additional_metrics)
+    elif task == "open-qa":
+        metrics_to_calculate = ["exact_match"] + list(config.additional_metrics)
+    elif task == "summarization":
+        metrics_to_calculate = ["exact_match", "sacrebleu", "bleu", "rouge", "word_length"] + list(config.additional_metrics)
+    elif task == "translation":
+        metrics_to_calculate = ["exact_match", "sacrebleu", "bleu", "word_length"] + list(config.additional_metrics)
+    elif task == "math":
+        metrics_to_calculate = ["exact_match_math"] + list(config.additional_metrics)
+    else:
+        raise NotImplementedError(f"Task {task} not implemented")   
+
+    if "sacrebleu" in metrics_to_calculate:
+        sacrebleu = load("sacrebleu", cache_dir=cache_dir)
+    if "rouge" in metrics_to_calculate:
+        rouge = load("rouge", cache_dir=cache_dir)
 
     result = {}
-    result["word_length_gen"] = np.array(
-        [len(text.split()) for text in generated_texts]
-    )
+    if "word_length" in metrics_to_calculate:
+        result["word_length_gen"] = np.array(
+            [len(text.split()) for text in generated_texts]
+        )
 
     time_dict = {}
 
     # Metrics that use both the generated texts and the original texts and
     # those that do not require reference texts
-    src_word_lengths = np.array([len(text.split()) for text in original_texts])
-
-    # Avoid division by zero
-    src_word_lengths_safe = np.where(src_word_lengths > 0, src_word_lengths, 1)
-    result["word_length_src_rel"] = result["word_length_gen"] / src_word_lengths_safe
-    if "bartscore" in config.additional_metrics and is_bart_score_available:
+    if "bartscore" in metrics_to_calculate and is_bart_score_available:
         log.info("Calculating BARTScore scores...")
         start_time = time()
         result.update(
@@ -105,70 +120,88 @@ def compute_metrics(
     # Metrics that use both the generated texts and the reference texts
     if reference_texts is not None:
         # Exact match
-        if isinstance(reference_texts[0], list):
-            result["exact_match"] = np.array(
+        if "exact_match" in metrics_to_calculate:
+            if isinstance(reference_texts[0], list):
+                result["exact_match"] = np.array(
+                    [
+                        any(_preprocess_text(pred) == _preprocess_text(one_ref) for one_ref in ref)
+                        for pred, ref in zip(generated_texts, reference_texts)
+                    ]
+                )
+            else:
+                result["exact_match"] = np.array(
+                    [_preprocess_text(pred) == _preprocess_text(ref) for pred, ref in zip(generated_texts, reference_texts)]
+                )
+        if "exact_match_math" in metrics_to_calculate:
+            # result["exact_match_math"] = np.array(
+            #     [
+            #         pred.split("Answer: ")[-1].lower() == ref.lower()
+            #         for pred, ref in zip(generated_texts, reference_texts)
+            #     ]
+            # )
+            result["exact_match_math"] = np.array(
                 [
-                    any(pred == one_ref for one_ref in ref)
+                    pred.split("#### ")[-1].lower() == ref.split("#### ")[-1].lower()
                     for pred, ref in zip(generated_texts, reference_texts)
                 ]
             )
-        else:
-            result["exact_match"] = np.array(
-                [pred == ref for pred, ref in zip(generated_texts, reference_texts)]
-            )
-        # BLEU
-        start_time = time()
-        result["bleu"] = np.array(
-            [
-                pair_bleu(references=ref, prediction=pred)
-                for pred, ref in tqdm(zip(generated_texts, reference_texts))
-            ]
-        )
-        time_dict["time_bleu"] = time() - start_time
-        # ROUGE
-        start_time = time()
-        result.update(
-            rouge.compute(
-                predictions=generated_texts,
-                references=reference_texts,
-                use_stemmer=True,
-            )
-        )
-        time_dict["time_rouge"] = time() - start_time
-        # Sacrebleu
-        start_time = time()
-        if not isinstance(reference_texts[0], list):
-            sacrebleu_references = [[ref] for ref in reference_texts]
-            sacrebleu_result = sacrebleu.compute(
-                predictions=generated_texts, references=sacrebleu_references
-            )
-            result["sacrebleu"] = sacrebleu_result.pop("score")
-        else:
-            sacrebleu_scores = []
-            for pred, ref in zip(generated_texts, reference_texts):
-                sacrebleu_result = sacrebleu.compute(
-                    predictions=[pred], references=[ref]
-                )
-                sacrebleu_scores.append(sacrebleu_result.pop("score"))
-            result["sacrebleu"] = sacrebleu_scores
-
-        time_dict["time_sacrebleu"] = time() - start_time
-        # Lengths
-        if isinstance(reference_texts[0], list):
-            ref_word_lengths = np.array(
+        if "bleu" in metrics_to_calculate:
+            # BLEU
+            start_time = time()
+            result["bleu"] = np.array(
                 [
-                    np.mean([len(text.split()) for text in ref])
-                    for ref in reference_texts
+                    pair_bleu(references=ref, prediction=pred)
+                    for pred, ref in tqdm(zip(generated_texts, reference_texts))
                 ]
             )
-        else:
-            ref_word_lengths = np.array([len(ref.split()) for ref in reference_texts])
-        # Avoid division by zero
-        ref_word_lengths_safe = np.where(ref_word_lengths > 0, ref_word_lengths, 1)
-        result["word_length_rel"] = result["word_length_gen"] / ref_word_lengths_safe
+            time_dict["time_bleu"] = time() - start_time
+        if "rouge" in metrics_to_calculate:
+            # ROUGE
+            start_time = time()
+            result.update(
+                rouge.compute(
+                    predictions=generated_texts,
+                    references=reference_texts,
+                    use_stemmer=True,
+                )
+            )
+            time_dict["time_rouge"] = time() - start_time
+        if "sacrebleu" in metrics_to_calculate:
+            # Sacrebleu
+            start_time = time()
+            if not isinstance(reference_texts[0], list):
+                sacrebleu_references = [[ref] for ref in reference_texts]
+                sacrebleu_result = sacrebleu.compute(
+                    predictions=generated_texts, references=sacrebleu_references
+                )
+                result["sacrebleu"] = sacrebleu_result.pop("score")
+            else:
+                sacrebleu_scores = []
+                for pred, ref in zip(generated_texts, reference_texts):
+                    sacrebleu_result = sacrebleu.compute(
+                        predictions=[pred], references=[ref]
+                    )
+                    sacrebleu_scores.append(sacrebleu_result.pop("score"))
+                result["sacrebleu"] = sacrebleu_scores
+
+            time_dict["time_sacrebleu"] = time() - start_time
+        if "word_length" in metrics_to_calculate:
+            # Lengths
+            if isinstance(reference_texts[0], list):
+                ref_word_lengths = np.array(
+                    [
+                        np.mean([len(text.split()) for text in ref])
+                        for ref in reference_texts
+                    ]
+                )
+            else:
+                ref_word_lengths = np.array([len(ref.split()) for ref in reference_texts])
+            # Avoid division by zero
+            ref_word_lengths_safe = np.where(ref_word_lengths > 0, ref_word_lengths, 1)
+            result["word_length_rel"] = result["word_length_gen"] / ref_word_lengths_safe
 
         # AlignScore
-        if "alignscore" in config.additional_metrics and is_alignscore_available:
+        if "alignscore" in metrics_to_calculate and is_alignscore_available:
             log.info("Calculating AlignScore scores...")
             start_time = time()
             alignscores = calculate_alignscore(
@@ -241,3 +274,32 @@ def compute_metrics(
     }
 
     return result
+
+def _preprocess_text(text: str, do_lowercase: bool = True, do_remove_punctuation: bool = True, do_remove_extra_spaces: bool = True, do_remove_stopwords: bool = False, stopwords: Optional[list[str]] = None) -> str:
+        # Convert to lowercase
+        if do_lowercase:
+            text = text.lower()
+        
+        # Remove punctuation
+        if do_remove_punctuation:
+            # Keep hyphens within words, remove other punctuation
+            text = re.sub(r'(?<!\w)-|-(?!\w)', ' ', text)  # Replace standalone hyphens
+            translator = str.maketrans('', '', string.punctuation.replace('-', ''))
+            text = text.translate(translator)
+            text = re.sub(r'(?<!\w)-(?!\w)', '', text)  # Remove remaining standalone hyphens
+        
+        # Normalize whitespace
+        if do_remove_extra_spaces:
+            text = ' '.join(text.split())
+        
+        # Remove stopwords
+        if do_remove_stopwords:
+            if stopwords is None:
+                import nltk
+                nltk.download('stopwords')
+                stopwords = nltk.corpus.stopwords.words('english')
+            words = text.split()
+            words = [w for w in words if w not in stopwords]
+            text = ' '.join(words)
+        
+        return text.strip()

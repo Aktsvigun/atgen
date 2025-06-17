@@ -2,9 +2,7 @@
 Custom Hydra resolvers for configuration calculations
 """
 
-from typing import Union
-
-from omegaconf import OmegaConf, DictConfig, ListConfig
+from omegaconf import OmegaConf
 
 
 def multiply_with_few_shot(input_max_length: int, few_shot_count: int) -> int:

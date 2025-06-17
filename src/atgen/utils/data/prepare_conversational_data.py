@@ -1,4 +1,3 @@
-from itertools import chain
 from datasets import Dataset
 from omegaconf import DictConfig
 

@@ -115,6 +115,7 @@ def generate_vllm(
         del llm_runner
         gc.collect()
         cuda.empty_cache()
+    _maybe_display_generations(generations, inference_config.num_display_generations)
     return generations
 
 
@@ -213,6 +214,7 @@ def generate_sglang(
     )
     # Clean up
     engine.shutdown()
+    _maybe_display_generations(generations, inference_config.num_display_generations)
     return generations
 
 
@@ -280,6 +282,7 @@ def generate_transformers(
         model_name=model.name_or_path,
         framework=TRANSFORMERS_FRAMEWORK
     )
+    _maybe_display_generations(generations, inference_config.num_display_generations)
     return generations
 
 
@@ -339,3 +342,9 @@ def tokenize_conversational_example(
         input_ids = tokenizer.apply_chat_template(example["messages"], add_generation_prompt=True)
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+def _maybe_display_generations(generations: list[str], num_display_gens: int):
+    if num_display_gens:
+        log.info("Displaying the first {} generations:".format(num_display_gens))
+        for i in range(num_display_gens):
+            log.info(f"Generation {i+1}: {generations[i]}")
