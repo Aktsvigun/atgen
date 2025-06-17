@@ -31,9 +31,9 @@ class AnthropicLabeller(BaseLabeler):
 
         annotations = []
         price = 0
-        for text in tqdm(data):
+        for messages in tqdm(data):
             request_kwargs = dict(base_request_kwargs)
-            request_kwargs["messages"] = [{"role": "user", "content": text}]
+            request_kwargs["messages"] = messages
             output = self.client.messages.create(**request_kwargs)
             price += self._calculate_price(output)
             annotations.append(output.content[0].text.strip())

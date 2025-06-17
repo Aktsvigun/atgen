@@ -133,6 +133,8 @@ def discourse_score(
     We omit the "relevance" dimension, since it requires a reference summary list, which
     we do not have access to during active learning.
     """
+    if isinstance(documents[0], list):
+        documents = [inst[-2]['content'].strip() for inst in documents]
     data = convert_to_json(src_list=documents, output_list=summaries)
     scores = [
         s["overall"]
