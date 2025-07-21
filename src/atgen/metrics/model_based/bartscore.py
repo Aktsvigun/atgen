@@ -1,4 +1,6 @@
-# %%
+from math import prod
+from atgen.metrics.base_metric import BaseMetric, MetricConfig
+from typing import List, Optional
 import traceback
 from typing import List
 from tqdm import tqdm
@@ -116,3 +118,45 @@ class BARTScorer:
         tgt_list = ["That's stupid.", "What's the problem?", "He is trustworthy."]
 
         print(self.score(src_list, tgt_list, batch_size))
+
+
+class BartScoreConfig(MetricConfig):
+    device: str = "cuda"
+    max_length: int = 1024
+    checkpoint: str = "facebook/bart-large-cnn"
+    cache_dir: str = "cache"
+    batch_size: int = 4
+
+class BartScore(BaseMetric):
+    def __init__(self, config: BartScoreConfig):
+        super().__init__(config)
+        self.scorer = BARTScorer(
+            device=self.config.device,
+            max_length=self.config.max_length,
+            checkpoint=self.config.checkpoint,
+            cache_dir=self.config.cache_dir,
+        )
+        
+    def compute(self, predictions: List[str], references: List[str], sources: Optional[List[str]] = None, **kwargs) -> float:
+        scores = {}
+        if references is not None:
+            scores["BARTScore-sh"] = np.array(
+                self.scorer.score(references, predictions, batch_size=self.config.batch_size)
+        )
+        if references is not None:
+            if isinstance(references[0], list):
+                scores_hr = []
+                for ref, pred in zip(references, predictions):
+                    inst_pred = [pred for _ in range(len(ref))]
+                # Take a maximum within the observation similar to ROUGE
+                    inst_score_hr = max(self.scorer.score(inst_pred, ref, batch_size=self.config.batch_size))
+                    scores_hr.append(inst_score_hr)
+                scores["BARTScore-hr"] = np.array(scores_hr)
+        else:
+            scores["BARTScore-hr"] = np.array(
+                    self.scorer.score(predictions, references, batch_size=self.config.batch_size)
+                )
+
+        if self.config.aggregate:
+            scores = {key: np.mean(value) for key, value in scores.items()}
+        return scores
