@@ -79,7 +79,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
         config.data.test_split_name is not None and config.data.test_split_name != ""
     )
 
-    log.info(
+    print(
         f"""Running Active Learning...
 AL Strategy: {config.al.strategy}
 Num Iterations: {num_al_iterations}
@@ -97,7 +97,7 @@ Prompt:\n{config.data.system_prompt}
     train_output_dir = workdir / "tmp"
     save_dir = workdir / "tmp_best"
 
-    log.info("Loading data.")
+    print("Loading data.")
     unlabeled_data = load_data(
         data_config=config.data,
         split=UNLABELED_DATA_SPLIT_DEFAULT_NAME,
@@ -112,12 +112,12 @@ Prompt:\n{config.data.system_prompt}
             seed=seed,
         )
 
-    log.info("Initial iteration: loading model & tokenizer.")
+    print("Initial iteration: loading model & tokenizer.")
     model, tokenizer = load_model_tokenizer(
         checkpoint=model_name, model_config=config.model, cache_dir=cache_dir
     )
 
-    log.info("Loading AL strategy.")
+    print("Loading AL strategy.")
     al_strategy: BaseStrategy = get_strategy(
         config.al.strategy,
         subsample_size=config.al.subsample_size,
@@ -132,6 +132,7 @@ Prompt:\n{config.data.system_prompt}
         **config.al.strategy_kwargs,
     )
 
+    print("Loading labeller")
     # TODO: unsure whether need to log here since may be confusing for a human labeller
     labeller: BaseLabeler = get_labeller(
         config.labeller,
@@ -142,7 +143,7 @@ Prompt:\n{config.data.system_prompt}
         data_config=config.data,  # if labeller is a custom LLM on transformers
         model_config=config.model,  # if labeller is a custom LLM on transformers
     )
-
+    print("Calculating query_ids")
     init_query_size = config.al.init_query_size + config.data.few_shot.count
     init_query_size_is_positive = init_query_size > 0
     if init_query_size_is_positive:
@@ -175,7 +176,7 @@ Prompt:\n{config.data.system_prompt}
             unlabeled_data = unlabeled_data.filter(lambda x: x["id"] not in query_ids)
             labeled_data = labeller(query)
             if labeller.is_out_of_budget:
-                log.info(f"Labeler ran out of budget at iteration 0.")
+                print(f"Labeler ran out of budget at iteration 0.")
             labeled_ids = query_ids
 
         # Get the few-shot examples
@@ -183,7 +184,7 @@ Prompt:\n{config.data.system_prompt}
             config=config, labeled_data=labeled_data, workdir=workdir
         )
 
-        log.info(f"Saving labeled data at iteration 0.")
+        print(f"Saving labeled data at iteration 0.")
         save_labeled_data(
             labeled_data=labeled_data,
             labeled_query=labeled_data,
@@ -196,6 +197,7 @@ Prompt:\n{config.data.system_prompt}
         labeled_data = unlabeled_data.select(range(0, 0))
         labeled_ids = []
 
+    print("Getting unlabeled data")
     unlabeled_data: Dataset = prepare_conversational_data(
         dataset=unlabeled_data,
         data_config=config.data,
@@ -205,6 +207,7 @@ Prompt:\n{config.data.system_prompt}
     )
 
     if has_test:
+        print("Preparing test data")
         if not config.data.use_test_benchmark:
             test_data: Dataset = prepare_conversational_data(
                 dataset=test_data,
@@ -214,6 +217,7 @@ Prompt:\n{config.data.system_prompt}
                 model_name=model_name,
             )
         # Evaluate the initial model before any training
+        # import pdb;pdb.set_trace()
         if init_query_size_is_positive and config.al.evaluate_zero_iteration:
             generations: list[str] = generate(
                 config.inference,
@@ -257,19 +261,20 @@ Prompt:\n{config.data.system_prompt}
 
     # Start AL cycle. Use `num_al_iterations + 2` because we do not label data
     # but want to train the model on the last iteration.
+    
     start_iter = 1 if init_query_size_is_positive else 0
     for al_iter in range(start_iter, num_al_iterations + 1 + start_iter):
-        log.info(f"Starting AL iteration #{al_iter}.")
+        print(f"Starting AL iteration #{al_iter}.")
 
         iter_dir = workdir / ("iter_" + str(al_iter))
         iter_dir.mkdir(exist_ok=True)
 
-        log.info(f"Iteration {al_iter}: model loading started...")
+        print(f"Iteration {al_iter}: model loading started...")
         if al_iter != 1:
             model, tokenizer = load_model_tokenizer(
                 checkpoint=model_name, model_config=config.model, cache_dir=cache_dir
             )
-        log.info(f"Iteration {al_iter}: model loading done.")
+        print(f"Iteration {al_iter}: model loading done.")
 
         if not config.data.is_in_conversational_format:
             train_eval_data = prepare_conversational_data(
@@ -309,7 +314,7 @@ Prompt:\n{config.data.system_prompt}
         # Launch training
         if len(train_data) > 0:
             train_result = trainer.train()
-            log.info(f"Training completed with {len(train_data)} examples")
+            print(f"Training completed with {len(train_data)} examples")
         else:
             log.warning(
                 "No labeled training data available. Skipping training for this iteration."
@@ -368,7 +373,7 @@ Prompt:\n{config.data.system_prompt}
 
         # Make AL query for the next round if we have not run out of iterations
         if al_iter != num_al_iterations + 1:
-            log.info(f"Making AL query at iteration {al_iter}.")
+            print(f"Making AL query at iteration {al_iter}.")
             query_ids: list[str] = al_strategy(
                 model=model,
                 tokenizer=tokenizer,
@@ -383,11 +388,11 @@ Prompt:\n{config.data.system_prompt}
             unlabeled_data: Dataset = unlabeled_data.filter(lambda x: x["id"] not in query_ids)
             labeled_query: Dataset = labeller(query)
             if labeller.is_out_of_budget:
-                log.info(f"Labeler ran out of budget at iteration {al_iter}.")
+                print(f"Labeler ran out of budget at iteration {al_iter}.")
             labeled_data: Dataset = concatenate_datasets([labeled_data, labeled_query])
             labeled_ids += query_ids
 
-            log.info(f"Saving labeled data at iteration #{al_iter}.")
+            print(f"Saving labeled data at iteration #{al_iter}.")
             save_labeled_data(
                 labeled_data=labeled_data,
                 labeled_query=labeled_query,
@@ -402,13 +407,13 @@ Prompt:\n{config.data.system_prompt}
         torch.cuda.empty_cache()
 
         if labeller.is_out_of_budget:
-            log.info("Labeler ran out of budget. Finishing active learning.")
+            print("Labeler ran out of budget. Finishing active learning.")
             return
         if is_performance_reached:
-            log.info("Stopping AL since the required performance is reached.")
+            print("Stopping AL since the required performance is reached.")
             return
 
-    log.info("Active learning is done.")
+    print("Active learning is done.")
 
 
 @hydra.main(
