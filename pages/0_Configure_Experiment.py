@@ -436,7 +436,7 @@ def main():
         st.warning(
             f"⚠️ An experiment '{running_experiment.get('experiment_name', 'Unknown')}' is already running! "
             f"Current iteration: {running_experiment.get('current_iteration', '?')}/{running_experiment.get('total_iterations', '?')}. "
-            f"The experiment was most likely started by one of the reviewers, so kindly wait for it to finish."
+            f"Please kindly wait for it to finish."
         )
 
         # Show option to force reset the status (in case of stale status)
