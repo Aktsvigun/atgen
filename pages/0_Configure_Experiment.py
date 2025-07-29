@@ -270,10 +270,6 @@ def create_progress_tracker(progress_container, num_iterations):
             update_experiment_status(STATUS_RUNNING, total_iterations=num_iterations)
             return
 
-        if iteration == num_iterations + 2:
-            update_experiment_status(STATUS_COMPLETED)
-            return
-
         if iteration > num_iterations:
             progress = 1.0
         else:
@@ -382,7 +378,7 @@ def run_active_learning_with_progress(config, progress_callback=None):
         update_experiment_status(STATUS_CANCELLED)
         raise
     except Exception as e:
-        update_experiment_status(STATUS_FAILED)
+        update_experiment_status(STATUS_COMPLETED)
         raise
 
 
@@ -435,7 +431,7 @@ def main():
             cur_iter = running_experiment.get('total_iterations', '?')
         st.warning(
             f"⚠️ An experiment '{running_experiment.get('experiment_name', 'Unknown')}' is already running! "
-            f"Current iteration: {running_experiment.get('current_iteration', '?')}/{running_experiment.get('total_iterations', '?')}. "
+            f"Current iteration: {cur_iter}/{running_experiment.get('total_iterations', '?')}. "
             f"Please kindly wait for it to finish."
         )
 
