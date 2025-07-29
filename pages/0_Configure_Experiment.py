@@ -936,7 +936,7 @@ def main():
             num_train_epochs = st.number_input(
                 "🔄 Number of training epochs",
                 min_value=1,
-                value=5,
+                value=1,
                 step=1,
                 help="Number of training epochs",
             )
@@ -994,7 +994,7 @@ def main():
             inference_batch_size = st.number_input(
                 "⚡ Inference batch size",
                 min_value=1,
-                value=4,
+                value=8,
                 step=1,
                 help="Batch size for inference",
             )

@@ -75,9 +75,7 @@ inference:
     model: ${model.checkpoint}
 
 evaluation:
-    additional_metrics:
-        - alignscore
-        - bartscore
+    additional_metrics: []
     provider: openrouter
     base_url: https://openrouter.ai/api/v1
     api_key:
@@ -91,3 +89,10 @@ evaluation:
     
 data:
     assistant_response_start: ${model.assistant_response_start}
+    test_subset_size: 3
+    train_subset_size: 100
+    dataset: SpeedOfMagic/gigaword_tiny
+    input_max_length: 100
+    output_max_length: 20
+    is_in_conversational_format: false
+    use_test_benchmark: false

@@ -217,7 +217,6 @@ Prompt:\n{config.data.system_prompt}
                 model_name=model_name,
             )
         # Evaluate the initial model before any training
-        # import pdb;pdb.set_trace()
         if init_query_size_is_positive and config.al.evaluate_zero_iteration:
             generations: list[str] = generate(
                 config.inference,
