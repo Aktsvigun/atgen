@@ -269,6 +269,7 @@ def create_progress_tracker(progress_container, num_iterations):
             # Update the status
             update_experiment_status(STATUS_RUNNING, total_iterations=num_iterations)
             return
+        iteration = max(iteration - 2, 0)
 
         if iteration > num_iterations:
             progress = 1.0
