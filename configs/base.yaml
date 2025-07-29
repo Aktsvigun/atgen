@@ -38,8 +38,8 @@ model:
     assistant_response_start: "<think>\n\n</think>\n\n"
     peft:
         use: True
-        r: 16
-        lora_alpha: 16
+        r: 64
+        lora_alpha: 64
         lora_dropout: 0.1
         bias: 'none'
         seed: ${seed}

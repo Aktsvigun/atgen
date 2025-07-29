@@ -855,7 +855,7 @@ def main():
         with col1:
             model_checkpoint = st.text_input(
                 "🤖 Model checkpoint",
-                value="Qwen/Qwen2.5-0.5B-Instruct",
+                value="Qwen/Qwen3-0.6B",
                 help="HuggingFace model ID for generation",
             )
 
@@ -912,7 +912,7 @@ def main():
             per_device_train_batch_size = st.number_input(
                 "⚡ Train batch size",
                 min_value=1,
-                value=4,
+                value=8,
                 step=1,
                 help="Training batch size per device",
             )
@@ -920,7 +920,7 @@ def main():
             eval_batch_size = st.number_input(
                 "⚡ Evaluation batch size",
                 min_value=1,
-                value=4,
+                value=8,
                 step=1,
                 help="Batch size for evaluation",
             )
