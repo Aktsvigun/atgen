@@ -269,7 +269,6 @@ def create_progress_tracker(progress_container, num_iterations):
             # Update the status
             update_experiment_status(STATUS_RUNNING, total_iterations=num_iterations)
             return
-        iteration = max(iteration - 2, 0)
 
         if iteration > num_iterations:
             progress = 1.0
@@ -427,6 +426,9 @@ def main():
 
                 pdb.set_trace()
 
+        cur_iter = running_experiment.get('current_iteration', '?')
+        if cur_iter != '?' and cur_iter >= running_experiment.get('total_iterations', '?'):
+            cur_iter = running_experiment.get('total_iterations', '?')
         st.warning(
             f"⚠️ An experiment '{running_experiment.get('experiment_name', 'Unknown')}' is already running! "
             f"Current iteration: {running_experiment.get('current_iteration', '?')}/{running_experiment.get('total_iterations', '?')}. "
