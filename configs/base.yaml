@@ -89,8 +89,8 @@ evaluation:
     
 data:
     assistant_response_start: ${model.assistant_response_start}
-    test_subset_size: 3
-    train_subset_size: 100
+    # test_subset_size: 3
+    # train_subset_size: 100
     dataset: SpeedOfMagic/gigaword_tiny
     input_max_length: 100
     output_max_length: 20
