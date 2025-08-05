@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 if torch.cuda.is_available():
+    import unsloth
     from unsloth import FastLanguageModel
 else:
 

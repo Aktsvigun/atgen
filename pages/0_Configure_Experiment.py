@@ -1,5 +1,6 @@
 import os
 import tempfile
+import traceback
 import json
 import logging
 from json.decoder import JSONDecodeError
@@ -7,6 +8,7 @@ from datetime import datetime
 from omegaconf import OmegaConf
 
 import streamlit as st
+import torch
 import yaml
 import pandas as pd
 from datasets import load_from_disk, Dataset, DatasetDict
@@ -25,6 +27,9 @@ from atgen.utils.constants import (
     UNLABELED_DATA_SPLIT_DEFAULT_NAME,
     TEST_DATA_SPLIT_DEFAULT_NAME,
 )
+
+# Fix for Examining the path of torch.classes raised error
+torch.classes.__path__ = []
 
 # Custom CSS for better styling
 st.set_page_config(
@@ -378,7 +383,9 @@ def run_active_learning_with_progress(config, progress_callback=None):
         update_experiment_status(STATUS_CANCELLED)
         raise
     except Exception as e:
-        update_experiment_status(STATUS_COMPLETED)
+        update_experiment_status(STATUS_FAILED)
+        print("Exception happened while running an experiment:")
+        print(traceback.format_exc())
         raise
 
 
@@ -625,7 +632,7 @@ def main():
                         ⚠️ Data Privacy Notice
                     </h4>
                     <p style="color: #856404; margin-bottom: 0; font-size: 0.9rem;">
-                        <strong>Important:</strong> When using API-based labellers (OpenAI, Anthropic, etc.), your dataset will be sent to external services for processing. 
+                        <strong>Important:</strong> When using API-based labellers (OpenAI, Anthropic, etc.), your dataset will be sent to external services for processing.
                         Please ensure you have the necessary permissions and that your data complies with the respective service providers' terms of use and privacy policies.
                         Consider using local/custom models if your data contains sensitive or proprietary information.
                     </p>
