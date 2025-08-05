@@ -38,8 +38,8 @@ model:
     assistant_response_start: "<think>\n\n</think>\n\n"
     peft:
         use: True
-        r: 16
-        lora_alpha: 16
+        r: 64
+        lora_alpha: 64
         lora_dropout: 0.1
         bias: 'none'
         seed: ${seed}
@@ -76,9 +76,7 @@ inference:
     num_display_generations: 5
 
 evaluation:
-    additional_metrics:
-        - alignscore
-        - bartscore
+    additional_metrics: []
     provider: openrouter
     base_url: https://openrouter.ai/api/v1
     api_key:
@@ -90,4 +88,12 @@ evaluation:
     deepeval_verbose_mode: False
     deepeval_truths_extraction_limit: 10
     
-    
+data:
+    assistant_response_start: ${model.assistant_response_start}
+    # test_subset_size: 3
+    # train_subset_size: 100
+    dataset: SpeedOfMagic/gigaword_tiny
+    input_max_length: 100
+    output_max_length: 20
+    is_in_conversational_format: false
+    use_test_benchmark: false

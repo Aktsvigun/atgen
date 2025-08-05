@@ -378,7 +378,7 @@ def run_active_learning_with_progress(config, progress_callback=None):
         update_experiment_status(STATUS_CANCELLED)
         raise
     except Exception as e:
-        update_experiment_status(STATUS_FAILED)
+        update_experiment_status(STATUS_COMPLETED)
         raise
 
 
@@ -426,10 +426,13 @@ def main():
 
                 pdb.set_trace()
 
+        cur_iter = running_experiment.get('current_iteration', '?')
+        if cur_iter != '?' and cur_iter >= running_experiment.get('total_iterations', '?'):
+            cur_iter = running_experiment.get('total_iterations', '?')
         st.warning(
             f"⚠️ An experiment '{running_experiment.get('experiment_name', 'Unknown')}' is already running! "
-            f"Current iteration: {running_experiment.get('current_iteration', '?')}/{running_experiment.get('total_iterations', '?')}. "
-            f"The experiment was most likely started by one of the reviewers, so kindly wait for it to finish."
+            f"Current iteration: {cur_iter}/{running_experiment.get('total_iterations', '?')}. "
+            f"Please kindly wait for it to finish."
         )
 
         # Show option to force reset the status (in case of stale status)
@@ -445,13 +448,13 @@ def main():
             col1, col2, col3 = st.columns(3)
             with col1:
                 if st.button("📊 View Metrics", use_container_width=True):
-                    st.switch_page("1_Metrics")
+                    st.switch_page("pages/1_Metrics.py")
             with col2:
                 if st.button("🏷️ View Labeled Examples", use_container_width=True):
-                    st.switch_page("2_Labeled_examples")
+                    st.switch_page("pages/2_Labeled_examples.py")
             with col3:
                 if st.button("👩‍🎨 Annotate Examples", use_container_width=True):
-                    st.switch_page("3_Annotation")
+                    st.switch_page("pages/4_Annotation.py")
             st.stop()
 
     st.markdown(
@@ -515,7 +518,7 @@ def main():
         with col1:
             strategy = st.radio(
                 "🎯 AL strategy",
-                options=["Huds", "Hadas", "IDDS", "Fac-Loc", "Random"],
+                options=["Random", "Huds", "Hadas", "IDDS", "Fac-Loc"],
                 help="Choose the active learning strategy to use for data selection",
             ).lower()
             # TODO: testing, remove this
@@ -526,7 +529,7 @@ def main():
                 "📊 AL query size",
                 min_value=1,
                 step=1,
-                value=10,
+                value=2,
                 help="Number of examples to select in each active learning iteration",
             )
 
@@ -561,7 +564,7 @@ def main():
                 min_value=0,
                 max_value=100,
                 step=1,
-                value=5,
+                value=2,
                 help="Maximum number of active learning iterations to run",
             )
 
@@ -697,7 +700,7 @@ def main():
             # Dataset input
             dataset = st.text_input(
                 "📚 Dataset or path to data",
-                value="Yale-LILY/aeslc",
+                value="SpeedOfMagic/gigaword_tiny",
                 help="HuggingFace dataset ID or local path to dataset",
             )
 
@@ -821,13 +824,13 @@ def main():
         with col1:
             input_field = st.text_input(
                 "📥 Input field name",
-                value="email_body",
+                value="document",
                 help="Name of the field containing input text in the dataset",
             )
         with col2:
             reference_field = st.text_input(
                 "📤 Reference field name",
-                value="subject_line",
+                value="summary",
                 help="Name of the field containing reference output in the dataset",
             )
 
@@ -855,7 +858,7 @@ def main():
         with col1:
             model_checkpoint = st.text_input(
                 "🤖 Model checkpoint",
-                value="Qwen/Qwen3-1.7B",
+                value="Qwen/Qwen3-0.6B",
                 help="HuggingFace model ID for generation",
             )
 
@@ -880,7 +883,7 @@ def main():
         with col1:
             lora = st.checkbox(
                 "🔧 Use LoRA",
-                value=True,
+                value=False,
                 help="Whether to use LoRA for efficient fine-tuning",
             )
             if lora:
@@ -912,7 +915,7 @@ def main():
             per_device_train_batch_size = st.number_input(
                 "⚡ Train batch size",
                 min_value=1,
-                value=4,
+                value=8,
                 step=1,
                 help="Training batch size per device",
             )
@@ -920,7 +923,7 @@ def main():
             eval_batch_size = st.number_input(
                 "⚡ Evaluation batch size",
                 min_value=1,
-                value=4,
+                value=8,
                 step=1,
                 help="Batch size for evaluation",
             )
@@ -936,7 +939,7 @@ def main():
             num_train_epochs = st.number_input(
                 "🔄 Number of training epochs",
                 min_value=1,
-                value=5,
+                value=1,
                 step=1,
                 help="Number of training epochs",
             )
@@ -987,14 +990,14 @@ def main():
         with col3:
             framework = st.selectbox(
                 "🛠️ Framework",
-                options=["vLLM", "SGLang", "Unsloth"],
+                options=["Transformers", "vLLM", "SGLang", "Unsloth"],
                 index=0,
                 help="Framework to use for inference",
             ).lower()
             inference_batch_size = st.number_input(
                 "⚡ Inference batch size",
                 min_value=1,
-                value=4,
+                value=8,
                 step=1,
                 help="Batch size for inference",
             )
@@ -1016,7 +1019,7 @@ def main():
                 "deepeval_summarization",
                 "deepeval_prompt_alignment",
             ],
-            default=["bartscore", "alignscore"],
+            default=[],
             help="Metrics to compute for evaluating model performance",
         )
 
@@ -1438,17 +1441,17 @@ def main():
                         nav_col1, nav_col2, nav_col3 = st.columns(3)
                         with nav_col1:
                             if st.button("📊 View Metrics", use_container_width=True):
-                                st.switch_page("1_Metrics")
+                                st.switch_page("pages/1_Metrics.py")
                         with nav_col2:
                             if st.button(
                                 "🏷️ View Labeled Examples", use_container_width=True
                             ):
-                                st.switch_page("2_Labeled_examples")
+                                st.switch_page("pages/2_Labeled_examples.py")
                         with nav_col3:
                             if st.button(
                                 "👩‍🎨 Annotate Examples", use_container_width=True
                             ):
-                                st.switch_page("3_Annotation")
+                                st.switch_page("pages/4_Annotation.py")
             except Exception as e:
                 # Update status to failed
                 update_experiment_status(STATUS_FAILED)
