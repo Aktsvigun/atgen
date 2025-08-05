@@ -2,6 +2,7 @@ defaults:
   - labeller: golden
   - data: test
   - al: random
+  - _self_
 
 experiment_name: test
 name: test
