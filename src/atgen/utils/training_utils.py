@@ -100,9 +100,13 @@ class DataCollatorForLastCompletionOnlyLM(DataCollatorForCompletionOnlyLM):
             )
 
             if not response_token_ids_idxs:
-                raise RuntimeError(
-                    f"Could not find response key {self.response_token_ids} in the input_ids"
+                # Log warning and skip this example by masking everything
+                logger.warning(
+                    f"Could not find response key {self.response_token_ids} in example {i}. "
+                    f"Masking entire example to exclude from loss."
                 )
+                batch["labels"][i, :] = self.ignore_index
+                continue
 
             # If there's an instruction template, find those too
             human_token_ids_idxs = []
@@ -111,43 +115,56 @@ class DataCollatorForLastCompletionOnlyLM(DataCollatorForCompletionOnlyLM):
                     batch["input_ids"][i], self.instruction_token_ids
                 )
 
+            # Ensure sequence ends with instruction_template + last assistant response
+            last_response_idx = response_token_ids_idxs[-1]
+            
+            # Find the user message before the last assistant response
+            preceding_human_idxs = [
+                idx for idx in human_token_ids_idxs if idx < last_response_idx
+            ]
+            if not preceding_human_idxs:
+                # Log warning and skip this example by masking everything
+                logger.warning(
+                    f"No user message found before the last assistant response in example {i}. "
+                    f"Masking entire example to exclude from loss."
+                )
+                batch["labels"][i, :] = self.ignore_index
+                continue
+            
+            # Find any content after the last assistant response
+            next_human_idxs = [
+                idx for idx in human_token_ids_idxs if idx > last_response_idx
+            ]
+            
+            # If there's content after the last assistant response, truncate it
+            if next_human_idxs:
+                end_idx = next_human_idxs[0]
+                # Truncate the sequence
+                batch["input_ids"][i, end_idx:] = self.tokenizer.pad_token_id
+                batch["attention_mask"][i, end_idx:] = 0
+            
             # Set all labels to ignore_index as default
             batch["labels"][i, :] = self.ignore_index
 
             # Only unmask the last assistant response
-            if len(response_token_ids_idxs) > 0:
-                last_response_idx = response_token_ids_idxs[-1]
-
-                # Skip the template tokens - only unmask content after the template
-                content_start_idx = last_response_idx + len(self.response_token_ids)
-
-                # Determine end of the response
-                if len(human_token_ids_idxs) > 0:
-                    # Find the next user message after the last assistant message, if any
-                    next_human_idxs = [
-                        idx for idx in human_token_ids_idxs if idx > last_response_idx
-                    ]
-                    if next_human_idxs:
-                        end_idx = next_human_idxs[0]
-                    else:
-                        end_idx = batch["input_ids"].shape[1]  # End of sequence
-                else:
-                    end_idx = batch["input_ids"].shape[1]  # End of sequence
-
-                # Unmask only the content after the template and before the end
-                batch["labels"][i, content_start_idx:end_idx] = batch["input_ids"][
-                    i, content_start_idx:end_idx
-                ]
+            content_start_idx = last_response_idx + len(self.response_token_ids)
+            end_idx = batch["input_ids"].shape[1]
+            
+            # Find the actual end of the response (before padding)
+            if self.tokenizer.pad_token_id is not None:
+                padding_mask = batch["input_ids"][i] == self.tokenizer.pad_token_id
+                if padding_mask.any():
+                    end_idx = padding_mask.nonzero()[0].item()
+            
+            # Unmask only the content after the template and before the end
+            batch["labels"][i, content_start_idx:end_idx] = batch["input_ids"][
+                i, content_start_idx:end_idx
+            ]
 
             # Always mask padding tokens
             if self.tokenizer.pad_token_id is not None:
                 padding_mask = batch["input_ids"][i] == self.tokenizer.pad_token_id
                 batch["labels"][i, padding_mask] = self.ignore_index
-
-            # TODO: probably remove this
-            # # Also use attention mask to identify padding (if available)
-            # if "attention_mask" in batch:
-            #     batch["labels"][i, batch["attention_mask"][i] == 0] = self.ignore_index
 
         return batch
 
@@ -258,7 +275,20 @@ def _dataset_to_chat_template(
     tokenized_texts = _formatting_fn(dataset, tokenizer)
     texts = []
     for text in tokenized_texts:
-        if not data_collator.response_template in text:
+        # Check if the tokenized response template is present
+        # This ensures we only keep examples that will work with the collator
+        tokenized = tokenizer(text, truncation=True, return_tensors="pt")
+        input_ids = tokenized["input_ids"][0].tolist()
+        
+        # Check if response_token_ids exist in the tokenized input
+        response_token_ids = data_collator.response_token_ids
+        found = False
+        for i in range(len(input_ids) - len(response_token_ids) + 1):
+            if input_ids[i : i + len(response_token_ids)] == response_token_ids:
+                found = True
+                break
+        
+        if not found:
             text = ""
         texts.append(text)
     return {TEXT_FIELD: texts}

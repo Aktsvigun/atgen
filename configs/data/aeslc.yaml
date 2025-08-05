@@ -12,3 +12,4 @@ is_in_conversational_format: false
 system_prompt: "Write a subject text for the email.\n\n"
 assistant_response_start: ${model.assistant_response_start}
 use_test_benchmark: false
+task: 'summarization'

@@ -22,38 +22,6 @@ OUTPUT_FILE_PATH = f"{TMP_DIR}/batch_output.jsonl"
 MAX_NUM_TRIES = 3
 UPDATE_TIME_IN_SECONDS = 10  # update time when checking for the completion
 
-
-# SYSTEM_PROMPT = """
-# Act as an experienced ...
-# [INSERT]
-# Examples for few-shot learning are below.
-# """.strip()
-
-# EXAMPLE_1_INPUT = """
-# [INSERT]
-# """.lstrip()
-#
-# EXAMPLE_2_INPUT = """
-# [INSERT]
-# """.lstrip()
-#
-# EXAMPLE_1_OUTPUT = """
-# [INSERT]
-# """.strip()
-#
-# EXAMPLE_2_OUTPUT = """
-# [INSERT]
-# """.strip()
-
-# Can remove / add examples. If you remove them completely, do not forget to remove the last line from the system prompt
-messages_template = [
-    # {"role": "system", "content": SYSTEM_PROMPT},
-    # {"role": "system", "name": "example_user", "content": EXAMPLE_1_INPUT},
-    # {"role": "system", "name": "example_assistant", "content": EXAMPLE_1_OUTPUT},
-    {"role": "user", "content": ""},
-]
-
-
 class OpenAILabeller(BaseLabeler):
     def __init__(
         self,
@@ -65,7 +33,10 @@ class OpenAILabeller(BaseLabeler):
         super().__init__(output_column_name, budget)
         self.config = config
         # Create the OpenAI client
-        kwargs = {} if base_url is None else {"base_url": base_url}
+        if base_url := (base_url or config.base_url):
+            kwargs = {"base_url": base_url}
+        else:
+            kwargs = {}
         self.client = OpenAI(api_key=self.config.api_key, **kwargs)
         self.mode = config.get("mode")
 
@@ -75,16 +46,12 @@ class OpenAILabeller(BaseLabeler):
         annotations = []
         total_price = 0
 
-        for text in tqdm(data, desc="Processing with OpenAI API"):
-            # Prepare messages for this input
-            text_messages = deepcopy(messages_template)
-            text_messages[-1]["content"] = text
-
+        for messages in tqdm(data, desc="Processing with OpenAI API"):
             # Make API call with retries
             for attempt in range(MAX_NUM_TRIES):
                 try:
                     response = self.client.chat.completions.create(
-                        messages=text_messages, **self.config.parameters
+                        messages=messages, **self.config.parameters
                     )
                     break
                 except Exception as e:
@@ -135,6 +102,10 @@ class OpenAILabeller(BaseLabeler):
             dataset = dataset.remove_columns(self.output_column_name)
 
         dataset = dataset.add_column(self.output_column_name, annotations)
+        # TODO: make a parameter
+        for i, annotation in enumerate(annotations[:2]):
+            print(f"Annotation of the {i+1}th instance: {annotation}")
+            print("-"*100)
         return dataset
 
     def _batched_call(self, dataset: Dataset) -> Dataset:
