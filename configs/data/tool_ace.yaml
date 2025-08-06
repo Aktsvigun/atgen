@@ -1,0 +1,15 @@
+dataset: 'Team-ACE/ToolACE'
+input_column_name: 'input'
+output_column_name: 'conversations'
+unlabeled_data_split_name: train
+test_split_name: bfcl
+train_subset_size: null
+test_subset_size: null
+input_max_length: 4096
+output_max_length: 512
+fetch_kwargs: {}
+is_in_conversational_format: true
+system_prompt: ""
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: true
+task: 'fc'
