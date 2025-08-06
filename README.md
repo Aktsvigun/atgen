@@ -21,7 +21,32 @@ A comprehensive toolkit for applying active learning techniques to natural langu
 
 ## 🔧 Installation
 
-`pip install atgen`
+### From PyPI (Stable Release)
+
+```bash
+pip install atgen
+```
+
+### From GitHub Main Branch (Latest Development)
+
+```bash
+pip install git+https://github.com/Aktsvigun/atgen.git
+```
+
+### Editable/Development Installation
+
+For development (e.g. a new AL / subset selection strategy) or if you want to modify the code:
+
+```bash
+# Clone the repository
+git clone https://github.com/Aktsvigun/atgen.git
+cd atgen
+
+# Install in editable mode
+pip install -e .
+```
+
+This will install the package in editable mode and allow you to make changes to the code and see them immediately reflected without reinstalling the package.
 
 ## 🚀 Usage
 
@@ -96,9 +121,34 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 If you use this toolkit in your research, please cite:
 
 ```
-@software{atgen,
-  title = {ATGen: Active Learning for Natural Language Generation},
-  url = {https://github.com/Aktsvigun/atgen},
-  year = {2025},
+@inproceedings{tsvigun-etal-2025-atgen,
+    title = "{ATG}en: A Framework for Active Text Generation",
+    author = "Tsvigun, Akim  and
+      Vasilev, Daniil  and
+      Tsvigun, Ivan  and
+      Lysenko, Ivan  and
+      Bektleuov, Talgat  and
+      Medvedev, Aleksandr  and
+      Vinogradova, Uliana  and
+      Severin, Nikita  and
+      Mozikov, Mikhail  and
+      Savchenko, Andrey  and
+      Makarov, Ilya  and
+      Rostislav, Grigorev  and
+      Kuleev, Ramil  and
+      Zhdanov, Fedor  and
+      Shelmanov, Artem",
+    editor = "Mishra, Pushkar  and
+      Muresan, Smaranda  and
+      Yu, Tao",
+    booktitle = "Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)",
+    month = jul,
+    year = "2025",
+    address = "Vienna, Austria",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2025.acl-demo.63/",
+    doi = "10.18653/v1/2025.acl-demo.63",
+    pages = "653--665",
+    ISBN = "979-8-89176-253-4",
 }
 ```
