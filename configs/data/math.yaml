@@ -1,0 +1,15 @@
+dataset: 'Aktsvigun/preprocessed_for_al_OpenR1-Math-220k'
+input_column_name: 'problem'
+output_column_name: {'train': 'short_solution', 'test': 'answer'}
+unlabeled_data_split_name: train
+test_split_name: test
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 4096
+output_max_length: 4096
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: "Please solve the math problem. In the end, add two line breaks and print the answer with \"Answer: <answer>\"."
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'math'

@@ -1,0 +1,15 @@
+dataset: ['openai/gsm8k', 'main']
+input_column_name: 'question'
+output_column_name: 'answer'
+unlabeled_data_split_name: train
+test_split_name: test
+train_subset_size: null
+test_subset_size: null
+input_max_length: 2048
+output_max_length: 1024
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: "Please generate a solution to the math problem below. In the end, add a line break and print the answer with \"#### <answer>\" replacing the <answer> tag with the answer."
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'math'

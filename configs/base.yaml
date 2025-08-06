@@ -10,6 +10,7 @@ defaults:
   - labeller: golden
   - data: aeslc
   - al: random
+  - _self_
 
 experiment_name: ${al.strategy}
 name: base
@@ -73,6 +74,7 @@ inference:
     top_p: 0.1
     temperature: 0.6
     model: ${model.checkpoint}
+    num_display_generations: 5
 
 evaluation:
     additional_metrics: []
@@ -86,7 +88,7 @@ evaluation:
     deepeval_async_mode: True
     deepeval_verbose_mode: False
     deepeval_truths_extraction_limit: 10
-    
+
 data:
     assistant_response_start: ${model.assistant_response_start}
     # test_subset_size: 3

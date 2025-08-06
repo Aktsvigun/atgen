@@ -1,0 +1,27 @@
+dataset: ['ehovy/race', 'all']
+input_column_name: {"article": "article", "question": "question", "options": "options"}
+output_column_name: 'answer'
+unlabeled_data_split_name: train
+test_split_name: test
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 1024
+output_max_length: 1
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: Please answer the question based on the article. Answer only with the letter corresponding to the correct answer. Only output the letter of the correct answer and nothing else.
+user_prompt_template: |
+    Article:
+    {article}
+
+    Question:
+    {question}
+
+    Options:
+    {options}
+
+    Correct answer (only the letter):
+
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'multi-choice-qa'
