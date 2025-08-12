@@ -343,12 +343,16 @@ Prompt:\n{config.data.system_prompt}
                 "No labeled training data available. Skipping training for this iteration."
             )
             train_result = {"training_loss": 0.0, "skipped": True}
-        del trainer
-        rmtree(train_output_dir)
 
+        model = model.cpu()
         if config.model.save_in_fp_32:
             model = model.to(torch.float32)
         model = model.eval().merge_and_unload()
+        # Free up memory
+        del trainer
+        gc.collect()
+        torch.cuda.empty_cache()
+        rmtree(train_output_dir)
 
         if not has_test:
             if dev_split_size > 0:

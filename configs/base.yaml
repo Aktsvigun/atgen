@@ -90,13 +90,3 @@ evaluation:
     deepeval_async_mode: True
     deepeval_verbose_mode: False
     deepeval_truths_extraction_limit: 10
-
-data:
-    assistant_response_start: ${model.assistant_response_start}
-    # test_subset_size: 3
-    # train_subset_size: 100
-    dataset: SpeedOfMagic/gigaword_tiny
-    input_max_length: 100
-    output_max_length: 20
-    is_in_conversational_format: false
-    use_test_benchmark: false

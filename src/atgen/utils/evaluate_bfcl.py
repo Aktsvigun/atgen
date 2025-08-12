@@ -10,6 +10,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 from shutil import rmtree
 from torch import cuda
 import gc
+from torch import cuda
 
 from .constants import DEFAULT_NUM_THREADS_BFCL, DEFAULT_GPU_MEMORY_UTILIZATION_BFCL, BFCL_NUM_RETRIES  
 
@@ -100,6 +101,9 @@ def _evaluate_bfcl(
         cwd = os.getcwd()
         os.chdir(bfcl_results_dir)
         model_name = save_dir
+    del model, tokenizer
+    gc.collect()
+    cuda.empty_cache()
 
     logger.info(f"Starting BFCL evaluation for model: {model_name}")
     logger.info(f"Test category: {test_category}")
