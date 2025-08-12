@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 
 from .validate_and_fill_config import validate_and_fill_config
 from .resolvers import register_resolvers
+from .downloaders import maybe_download_packages
 
 
 os.environ["WANDB_DISABLED"] = "true"
@@ -28,6 +29,9 @@ def main_decorator(func):
             os.chdir(hydra.utils.get_original_cwd())
         else:
             auto_generated_dir = config.output_dir
+
+        maybe_download_packages(config.output_dir)
+
         log.info(f"Work dir: {auto_generated_dir}")
         # Save config into yaml format
         with open(Path(auto_generated_dir) / "config.yaml", "w") as f:
@@ -39,8 +43,8 @@ def main_decorator(func):
             os.environ["HF_EVALUATE_OFFLINE"] = "1"
 
         os.environ["PYTHONHASHSEED"] = str(config.seed)
-        from transformers import set_seed
 
+        from transformers import set_seed
         set_seed(config.seed)
 
         func(config, workdir=Path(auto_generated_dir))

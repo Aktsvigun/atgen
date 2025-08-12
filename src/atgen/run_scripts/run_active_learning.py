@@ -32,7 +32,6 @@ def run_active_learning(config, workdir: Union[str, Path]):
         maybe_get_few_shot_examples,
         get_output_column_name_for_phase,
     )
-    from atgen.utils.installers import install_spacy, install_nltk
     from atgen.utils.load_model_tokenizer import load_model_tokenizer
     from atgen.utils.prepare_model_for_training import prepare_model_for_training
     from atgen.utils.training_utils import get_trainer
@@ -50,10 +49,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
     from atgen.utils.check_performance_metrics import (
         check_performance_against_requirements,
     )
-
-    # TODO Figure out how to stop downloading it every time
-    install_spacy()
-    install_nltk()
+    from atgen.utils.evaluate_bfcl import evaluate_bfcl
 
     seed = config.seed
     cache_dir = config.cache_dir
@@ -65,7 +61,7 @@ def run_active_learning(config, workdir: Union[str, Path]):
 
     num_al_iterations = config.al.num_iterations
     required_performance_dict = check_required_performance(
-        config.al.required_performance
+        required_performance=config.al.required_performance
     )
     budget = config.al.budget
     if budget is None:
@@ -107,7 +103,7 @@ Prompt:\n{config.data.system_prompt}
         cache_dir=config.cache_dir,
         seed=seed,
     )
-    if has_test:
+    if has_test and not config.data.use_test_benchmark:
         test_data = load_data(
             data_config=config.data,
             split=TEST_DATA_SPLIT_DEFAULT_NAME,
@@ -134,7 +130,7 @@ Prompt:\n{config.data.system_prompt}
 
     print("Loading AL strategy.")
     al_strategy: BaseStrategy = get_strategy(
-        config.al.strategy,
+        strategy_name=config.al.strategy,
         subsample_size=config.al.subsample_size,
         unlabeled_pool=unlabeled_data[input_column_name],
         model=model,
@@ -177,7 +173,7 @@ Prompt:\n{config.data.system_prompt}
                 lambda x: x["id"] not in set(labeled_ids)
             )
         else:
-            query_ids: list[str] = al_strategy(
+            query_ids: list[int] = al_strategy(
                 model=model,
                 tokenizer=tokenizer,
                 unlabeled_pool=unlabeled_data.remove_columns(output_column_name_train),
@@ -231,27 +227,38 @@ Prompt:\n{config.data.system_prompt}
                 few_shot_examples=few_shot_examples,
                 model_name=model_name,
             )
-        # Evaluate the initial model before any training
-        if init_query_size_is_positive and config.al.evaluate_zero_iteration:
-            generations: list[str] = generate(
-                config.inference,
-                data=test_data,
-                model=model,
-                tokenizer=tokenizer,
-                save_dir=save_dir,
-                data_config=config.data,
-                model_config=config.model,
-            )
-            if os.path.exists(save_dir):
-                rmtree(save_dir)
+            # Evaluate the initial model before any training
+            if init_query_size_is_positive and config.al.evaluate_zero_iteration:
+                generations: list[str] = generate(
+                    config.inference,
+                    data=test_data,
+                    model=model,
+                    tokenizer=tokenizer,
+                    save_dir=save_dir,
+                    data_config=config.data,
+                    model_config=config.model,
+                )
+                if os.path.exists(save_dir):
+                    rmtree(save_dir)
 
-            metrics: dict[str, float] = compute_metrics(
-                generated_texts=generations,
-                reference_texts=test_data[output_column_name_test],
-                original_texts=test_data[input_column_name],
-                task=config.data.task,
-                config=config.evaluation,
-                cache_dir=cache_dir,
+                metrics: dict[str, float] = compute_metrics(
+                    generated_texts=generations,
+                    reference_texts=test_data[output_column_name_test],
+                    original_texts=test_data[input_column_name],
+                    task=config.data.task,
+                    config=config.evaluation,
+                    cache_dir=cache_dir,
+                )
+        else:
+            if "bfcl" in config.data.test_split_name:
+                test_split_name = config.data.test_split_name.split("bfcl_")[1]
+            else:
+                raise NotImplementedError(f"Test split name {config.data.test_split_name} is not supported")
+            generations, metrics = evaluate_bfcl(
+                model_name=model_name,
+                bfcl_results_dir=iter_dir,
+                test_category=test_split_name,
+                num_threads=config.inference.num_threads_for_bfcl,
             )
 
             # Check required performance metrics
@@ -272,6 +279,7 @@ Prompt:\n{config.data.system_prompt}
                 al_iter=0,
                 train_result={},
                 model=None,
+                tokenizer=None,
             )
 
     # Start AL cycle. Use `num_al_iterations + 2` because we do not label data
@@ -346,26 +354,40 @@ Prompt:\n{config.data.system_prompt}
             if dev_split_size > 0:
                 test_data = eval_data
         else:
-            generations: list[str] = generate(
-                config.inference,
-                data=test_data,
-                model=model,
-                tokenizer=tokenizer,
-                save_dir=save_dir,
-                data_config=config.data,
-                model_config=config.model,
-            )
-            if os.path.exists(save_dir):
-                rmtree(save_dir)
+            if not config.data.use_test_benchmark:
+                generations: list[str] = generate(
+                    config.inference,
+                    data=test_data,
+                    model=model,
+                    tokenizer=tokenizer,
+                    save_dir=save_dir,
+                    data_config=config.data,
+                    model_config=config.model,
+                )
+                if os.path.exists(save_dir):
+                    rmtree(save_dir)
 
-            metrics: dict[str, float] = compute_metrics(
-                generated_texts=generations,
-                reference_texts=test_data[output_column_name_test],
-                original_texts=test_data[input_column_name],
-                task=config.data.task,
-                config=config.evaluation,
-                cache_dir=cache_dir,
-            )
+                metrics: dict[str, float] = compute_metrics(
+                    generated_texts=generations,
+                    reference_texts=test_data[output_column_name_test],
+                    original_texts=test_data[input_column_name],
+                    task=config.data.task,
+                    config=config.evaluation,
+                    cache_dir=cache_dir,
+                )
+            else:
+                if "bfcl" in config.data.test_split_name:
+                    test_split_name = config.data.test_split_name.split("bfcl_")[1]
+                else:
+                    raise NotImplementedError(f"Test split name {config.data.test_split_name} is not supported")
+                generations, metrics = evaluate_bfcl(
+                    model_name=model_name,
+                    bfcl_results_dir=iter_dir,
+                    model=model,
+                    tokenizer=tokenizer,
+                    test_category=test_split_name,
+                    num_threads=config.inference.num_threads_for_bfcl,
+                )
 
             # Check required performance metrics
             is_performance_reached, is_metrics_availability_checked, available_metrics = (
@@ -385,6 +407,7 @@ Prompt:\n{config.data.system_prompt}
             al_iter=al_iter,
             train_result=train_result,
             model=model,
+            tokenizer=tokenizer,
         )
 
         # Make AL query for the next round if we have not run out of iterations

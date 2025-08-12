@@ -202,10 +202,10 @@ def _get_response_instruction_templates(
     """
     if "gemma" in tokenizer.name_or_path.lower():
         response_template = "<start_of_turn>model\n"
-        instruction_template = "\n<start_of_turn>user\n"
-    elif "qwen" in tokenizer.name_or_path.lower():
-        response_template = "<|im_start|>assistant\n"
-        instruction_template = "\n<|im_start|>user\n"
+        instruction_template = "<start_of_turn>user\n"
+    elif "qwen3" in tokenizer.name_or_path.lower():
+        response_template = "<|im_start|>assistant\n"  # don't include empty reasoning
+        instruction_template = "<|im_start|>user\n"
     elif "llama" in tokenizer.name_or_path.lower():
         response_template = "<|start_header_id|>assistant<|end_header_id|>\n\n"
         instruction_template = "<|start_header_id|>user<|end_header_id|>\n\n"
@@ -290,7 +290,7 @@ def _dataset_to_chat_template(
         
         if not found:
             text = ""
-        texts.append(text)
+        texts.append(text.strip())
     return {TEXT_FIELD: texts}
 
 

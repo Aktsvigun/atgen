@@ -17,6 +17,7 @@ name: base
 output_dir: outputs
 offline_mode: False
 cache_dir: cache
+save_model: False
 seed: 42
 al:
     # Strategy configuration now loaded from configs/al/<strategy>.yaml
@@ -39,9 +40,9 @@ model:
     assistant_response_start: "<think>\n\n</think>\n\n"
     peft:
         use: True
-        r: 64
-        lora_alpha: 64
-        lora_dropout: 0.1
+        r: 32
+        lora_alpha: 32
+        lora_dropout: 0.
         bias: 'none'
         seed: ${seed}
         use_gradient_checkpointing: 'unsloth'
@@ -75,6 +76,7 @@ inference:
     temperature: 0.6
     model: ${model.checkpoint}
     num_display_generations: 5
+    num_threads_for_bfcl: 32
 
 evaluation:
     additional_metrics: []

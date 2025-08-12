@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from omegaconf import DictConfig
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from atgen.utils.combine_results import combine_results
 
@@ -21,6 +21,7 @@ def save_log_iter_results(
     al_iter: int,
     train_result: dict,
     model: Optional[PreTrainedModel] = None,
+    tokenizer: Optional[PreTrainedTokenizer] = None,
 ):
     log.info(metrics)
     with open(iter_dir / "train_result.json", "w") as f:
@@ -32,5 +33,6 @@ def save_log_iter_results(
     combine_results(workdir, al_iter)
 
     log.info(f"Iteration {al_iter}: saving the trained model...")
-    if config.save_model and model is not None:
-        model.save_pretrained(workdir / "model.bin")
+    if config.save_model and (model is not None):
+        model.save_pretrained(workdir / "model")
+        tokenizer.save_pretrained(workdir / "tokenizer")

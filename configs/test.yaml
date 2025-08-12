@@ -10,6 +10,7 @@ output_dir: outputs
 offline_mode: False
 cache_dir: cache
 seed: 42
+save_model: False
 al:
     init_query_size: 2
     query_size: 2
@@ -64,6 +65,7 @@ inference:
     top_p: 0.1
     model: ${model.checkpoint}
     num_display_generations: 0
+    num_threads_for_bfcl: 32
 
 evaluation:
     additional_metrics: []
