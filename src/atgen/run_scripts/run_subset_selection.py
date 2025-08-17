@@ -3,7 +3,7 @@ import torch
 from shutil import rmtree
 import gc
 import json
- 
+
 import hydra
 from pathlib import Path
 from typing import Union
@@ -13,7 +13,7 @@ from atgen.utils.constants import (
     DEFAULT_CONFIG_NAME,
     UNLABELED_DATA_SPLIT_DEFAULT_NAME,
     TEST_DATA_SPLIT_DEFAULT_NAME,
-    NUM_PROCS_FOR_DATASETS
+    NUM_PROCS_FOR_DATASETS,
 )
 
 log = logging.getLogger()
@@ -55,19 +55,9 @@ def run_subset_selection(config, workdir: Union[str, Path]):
     model_name = config.model.checkpoint
 
     num_al_iterations = config.al.num_iterations
-    required_performance_dict = check_required_performance(
-        required_performance=config.al.required_performance
-    )
     budget = config.al.budget
     if budget is None:
         budget = 1e10
-
-    # Stopping criteria due to reaching required performance
-    is_performance_reached = False
-
-    # Initialize variables for tracking available metrics
-    available_metrics = {}
-    is_metrics_availability_checked = False
 
     has_test = (
         config.data.test_split_name is not None and config.data.test_split_name != ""
@@ -126,6 +116,7 @@ Prompt:\n{config.data.system_prompt}
     if config.al.query_ids_path:
         with open(config.al.query_ids_path, "r") as f:
             labeled_ids = json.load(f)[:al_query_size]
+        log.info(f"Loaded {len(labeled_ids)} labeled ids from {config.al.query_ids_path}")
     else:
         print("Loading subset selection strategy...")
         ss_strategy: BaseStrategy = get_strategy(
@@ -167,7 +158,11 @@ Prompt:\n{config.data.system_prompt}
     query: Dataset = unlabeled_data.filter(lambda x: x["id"] in labeled_ids)
     labeled_data: Dataset = labeller(query)
     if labeller.is_out_of_budget:
-        labeled_data = labeled_data.filter(lambda x: x[labeller.output_column_name] != "", batched=False, num_proc=NUM_PROCS_FOR_DATASETS)
+        labeled_data = labeled_data.filter(
+            lambda x: x[labeller.output_column_name] != "",
+            batched=False,
+            num_proc=NUM_PROCS_FOR_DATASETS,
+        )
         print(f"Labeler ran out of budget at iteration 0.")
 
     # Get the few-shot examples
@@ -224,12 +219,14 @@ Prompt:\n{config.data.system_prompt}
             if "bfcl" in config.data.test_split_name:
                 test_split_name = config.data.test_split_name.split("bfcl_")[1]
             else:
-                raise NotImplementedError(f"Test split name {config.data.test_split_name} is not supported")
+                raise NotImplementedError(
+                    f"Test split name {config.data.test_split_name} is not supported"
+                )
             generations, metrics = evaluate_bfcl(
                 model_name=model_name,
                 bfcl_results_dir=iter_dir,
                 test_category=test_split_name,
-                num_threads=config.inference.num_threads_for_bfcl
+                num_threads=config.inference.num_threads_for_bfcl,
             )
         save_log_iter_results(
             config=config,
@@ -245,7 +242,7 @@ Prompt:\n{config.data.system_prompt}
 
     # Start AL cycle. Use `num_al_iterations + 2` because we do not label data
     # but want to train the model on the last iteration.
-    
+
     al_iter = 1 if config.al.eval_zero_iteration else 0
     iter_dir = workdir / ("iter_" + str(al_iter))
     iter_dir.mkdir(exist_ok=True)
@@ -334,7 +331,9 @@ Prompt:\n{config.data.system_prompt}
             if "bfcl" in config.data.test_split_name:
                 test_split_name = config.data.test_split_name.split("bfcl_")[1]
             else:
-                raise NotImplementedError(f"Test split name {config.data.test_split_name} is not supported")
+                raise NotImplementedError(
+                    f"Test split name {config.data.test_split_name} is not supported"
+                )
             generations, metrics = evaluate_bfcl(
                 model_name=model_name,
                 bfcl_results_dir=iter_dir,
@@ -354,7 +353,6 @@ Prompt:\n{config.data.system_prompt}
             model=model,
             tokenizer=tokenizer,
         )
-
 
     print("Subset selection is done.")
 

@@ -27,7 +27,6 @@ al:
     num_iterations: 5
     eval_zero_iteration: True
     subsample_size: -1
-    query_ids_path: null
     required_performance:
         rouge1: 0.5
     budget:

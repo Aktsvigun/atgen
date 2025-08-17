@@ -117,7 +117,7 @@ class DataCollatorForLastCompletionOnlyLM(DataCollatorForCompletionOnlyLM):
 
             # Ensure sequence ends with instruction_template + last assistant response
             last_response_idx = response_token_ids_idxs[-1]
-            
+
             # Find the user message before the last assistant response
             preceding_human_idxs = [
                 idx for idx in human_token_ids_idxs if idx < last_response_idx
@@ -130,32 +130,32 @@ class DataCollatorForLastCompletionOnlyLM(DataCollatorForCompletionOnlyLM):
                 )
                 batch["labels"][i, :] = self.ignore_index
                 continue
-            
+
             # Find any content after the last assistant response
             next_human_idxs = [
                 idx for idx in human_token_ids_idxs if idx > last_response_idx
             ]
-            
+
             # If there's content after the last assistant response, truncate it
             if next_human_idxs:
                 end_idx = next_human_idxs[0]
                 # Truncate the sequence
                 batch["input_ids"][i, end_idx:] = self.tokenizer.pad_token_id
                 batch["attention_mask"][i, end_idx:] = 0
-            
+
             # Set all labels to ignore_index as default
             batch["labels"][i, :] = self.ignore_index
 
             # Only unmask the last assistant response
             content_start_idx = last_response_idx + len(self.response_token_ids)
             end_idx = batch["input_ids"].shape[1]
-            
+
             # Find the actual end of the response (before padding)
             if self.tokenizer.pad_token_id is not None:
                 padding_mask = batch["input_ids"][i] == self.tokenizer.pad_token_id
                 if padding_mask.any():
                     end_idx = padding_mask.nonzero()[0].item()
-            
+
             # Unmask only the content after the template and before the end
             batch["labels"][i, content_start_idx:end_idx] = batch["input_ids"][
                 i, content_start_idx:end_idx
@@ -279,7 +279,7 @@ def _dataset_to_chat_template(
         # This ensures we only keep examples that will work with the collator
         tokenized = tokenizer(text, truncation=True, return_tensors="pt")
         input_ids = tokenized["input_ids"][0].tolist()
-        
+
         # Check if response_token_ids exist in the tokenized input
         response_token_ids = data_collator.response_token_ids
         found = False
@@ -287,7 +287,7 @@ def _dataset_to_chat_template(
             if input_ids[i : i + len(response_token_ids)] == response_token_ids:
                 found = True
                 break
-        
+
         if not found:
             text = ""
         texts.append(text.strip())

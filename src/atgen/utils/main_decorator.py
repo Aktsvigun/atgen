@@ -45,6 +45,7 @@ def main_decorator(func):
         os.environ["PYTHONHASHSEED"] = str(config.seed)
 
         from transformers import set_seed
+
         set_seed(config.seed)
 
         func(config, workdir=Path(auto_generated_dir))

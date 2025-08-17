@@ -75,7 +75,7 @@ def load_model_tokenizer(
                 model_config.checkpoint,
                 model_max_length=model_config.model_max_length,
                 cache_dir=cache_dir,
-                padding_side="left"
+                padding_side="left",
             )
         n_tries += 1
     if model is None:

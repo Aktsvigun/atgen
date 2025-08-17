@@ -32,5 +32,5 @@ transformers>=4.52.4
 trl==0.19.1
 torchmetrics==1.4.1
 unsloth==2025.8.1
-vllm==0.10.0
+# vllm==0.10.0
 xlrd==1.2.0

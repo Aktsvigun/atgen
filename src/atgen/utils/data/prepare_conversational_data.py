@@ -19,10 +19,18 @@ def prepare_conversational_data(
 
     few_shot_messages = []
     if few_shot_examples:
-        for (fs_input, fs_output) in zip(few_shot_examples[input_column_name], few_shot_examples[output_column_name]):
+        for fs_input, fs_output in zip(
+            few_shot_examples[input_column_name], few_shot_examples[output_column_name]
+        ):
             few_shot_messages.append({"role": "user", "content": fs_input})
-            response_start = data_config.assistant_response_start if data_config.assistant_response_start else ""
-            few_shot_messages.append({"role": "assistant", "content": response_start + fs_output})
+            response_start = (
+                data_config.assistant_response_start
+                if data_config.assistant_response_start
+                else ""
+            )
+            few_shot_messages.append(
+                {"role": "assistant", "content": response_start + fs_output}
+            )
     # Get appropriate preprocessing function based on all parameters
     preprocess_fn = get_preprocess_function(
         model_name=model_name,

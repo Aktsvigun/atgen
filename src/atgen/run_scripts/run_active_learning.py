@@ -2,7 +2,7 @@ import os
 import torch
 from shutil import rmtree
 import gc
- 
+
 import hydra
 from pathlib import Path
 from typing import Union
@@ -257,7 +257,9 @@ Prompt:\n{config.data.system_prompt}
             if "bfcl" in config.data.test_split_name:
                 test_split_name = config.data.test_split_name.split("bfcl_")[1]
             else:
-                raise NotImplementedError(f"Test split name {config.data.test_split_name} is not supported")
+                raise NotImplementedError(
+                    f"Test split name {config.data.test_split_name} is not supported"
+                )
             generations, metrics = evaluate_bfcl(
                 model_name=model_name,
                 bfcl_results_dir=iter_dir,
@@ -266,13 +268,15 @@ Prompt:\n{config.data.system_prompt}
             )
 
             # Check required performance metrics
-            is_performance_reached, is_metrics_availability_checked, available_metrics = (
-                check_performance_against_requirements(
-                    metrics=metrics,
-                    required_performance_dict=required_performance_dict,
-                    is_metrics_availability_checked=is_metrics_availability_checked,
-                    available_metrics=available_metrics,
-                )
+            (
+                is_performance_reached,
+                is_metrics_availability_checked,
+                available_metrics,
+            ) = check_performance_against_requirements(
+                metrics=metrics,
+                required_performance_dict=required_performance_dict,
+                is_metrics_availability_checked=is_metrics_availability_checked,
+                available_metrics=available_metrics,
             )
         save_log_iter_results(
             config=config,
@@ -288,7 +292,7 @@ Prompt:\n{config.data.system_prompt}
 
     # Start AL cycle. Use `num_al_iterations + 1` because we do not label data
     # but want to train the model on the last iteration.
-    
+
     start_iter = 1 if init_query_size_is_positive else 0
     for al_iter in range(start_iter, num_al_iterations + 1 + start_iter):
         print(f"Starting AL iteration #{al_iter}.")
@@ -387,7 +391,9 @@ Prompt:\n{config.data.system_prompt}
                 if "bfcl" in config.data.test_split_name:
                     test_split_name = config.data.test_split_name.split("bfcl_")[1]
                 else:
-                    raise NotImplementedError(f"Test split name {config.data.test_split_name} is not supported")
+                    raise NotImplementedError(
+                        f"Test split name {config.data.test_split_name} is not supported"
+                    )
                 generations, metrics = evaluate_bfcl(
                     model_name=model_name,
                     bfcl_results_dir=iter_dir,
@@ -398,13 +404,15 @@ Prompt:\n{config.data.system_prompt}
                 )
 
             # Check required performance metrics
-            is_performance_reached, is_metrics_availability_checked, available_metrics = (
-                check_performance_against_requirements(
-                    metrics=metrics,
-                    required_performance_dict=required_performance_dict,
-                    is_metrics_availability_checked=is_metrics_availability_checked,
-                    available_metrics=available_metrics,
-                )
+            (
+                is_performance_reached,
+                is_metrics_availability_checked,
+                available_metrics,
+            ) = check_performance_against_requirements(
+                metrics=metrics,
+                required_performance_dict=required_performance_dict,
+                is_metrics_availability_checked=is_metrics_availability_checked,
+                available_metrics=available_metrics,
             )
         save_log_iter_results(
             config=config,
@@ -432,7 +440,9 @@ Prompt:\n{config.data.system_prompt}
             )
 
             query: Dataset = unlabeled_data.filter(lambda x: x["id"] in query_ids)
-            unlabeled_data: Dataset = unlabeled_data.filter(lambda x: x["id"] not in query_ids)
+            unlabeled_data: Dataset = unlabeled_data.filter(
+                lambda x: x["id"] not in query_ids
+            )
             labeled_query: Dataset = labeller(query)
             if labeller.is_out_of_budget:
                 print(f"Labeler ran out of budget at iteration {al_iter}.")
