@@ -2,8 +2,7 @@ import os
 import torch
 from shutil import rmtree
 import gc
-import json
-
+ 
 import hydra
 from pathlib import Path
 from typing import Union
@@ -13,8 +12,6 @@ from atgen.utils.constants import (
     DEFAULT_CONFIG_NAME,
     UNLABELED_DATA_SPLIT_DEFAULT_NAME,
     TEST_DATA_SPLIT_DEFAULT_NAME,
-    OUTPUT_FIELD_PURPOSE_TRAIN,
-    OUTPUT_FIELD_PURPOSE_TEST,
 )
 
 log = logging.getLogger()
@@ -30,7 +27,6 @@ def run_active_learning(config, workdir: Union[str, Path]):
         load_data,
         prepare_conversational_data,
         maybe_get_few_shot_examples,
-        get_output_column_name_for_phase,
     )
     from atgen.utils.load_model_tokenizer import load_model_tokenizer
     from atgen.utils.prepare_model_for_training import prepare_model_for_training
@@ -158,6 +154,12 @@ Prompt:\n{config.data.system_prompt}
     init_query_size = config.al.init_query_size + config.data.few_shot.count
     init_query_size_is_positive = init_query_size > 0
     if init_query_size_is_positive:
+        if config.al.init_query_size == 0:
+            raise ValueError(
+                "It's useless to duplicate selection process in the first iteration. "
+                "Either set `al.init_query_size` to a positive number or set `data.few_shot.count` to 0."
+            )
+
         iter_dir = workdir / "iter_0"
         iter_dir.mkdir(exist_ok=True)
 
@@ -217,38 +219,40 @@ Prompt:\n{config.data.system_prompt}
         model_name=model_name,
     )
 
-    if has_test:
+    if has_test and not config.data.use_test_benchmark:
         print("Preparing test data")
+        test_data: Dataset = prepare_conversational_data(
+            dataset=test_data,
+            data_config=config.data,
+            split="test",
+            few_shot_examples=few_shot_examples,
+            model_name=model_name,
+        )
+    # Evaluate the initial model before any training
+    # Don't need to evaluate if init_query_size is 0 because we'll get it
+    # in the first iteration
+    if init_query_size_is_positive and config.al.eval_zero_iteration:
         if not config.data.use_test_benchmark:
-            test_data: Dataset = prepare_conversational_data(
-                dataset=test_data,
+            generations: list[str] = generate(
+                config.inference,
+                data=test_data,
+                model=model,
+                tokenizer=tokenizer,
+                save_dir=save_dir,
                 data_config=config.data,
-                split="test",
-                few_shot_examples=few_shot_examples,
-                model_name=model_name,
+                model_config=config.model,
             )
-            # Evaluate the initial model before any training
-            if init_query_size_is_positive and config.al.evaluate_zero_iteration:
-                generations: list[str] = generate(
-                    config.inference,
-                    data=test_data,
-                    model=model,
-                    tokenizer=tokenizer,
-                    save_dir=save_dir,
-                    data_config=config.data,
-                    model_config=config.model,
-                )
-                if os.path.exists(save_dir):
-                    rmtree(save_dir)
+            if os.path.exists(save_dir):
+                rmtree(save_dir)
 
-                metrics: dict[str, float] = compute_metrics(
-                    generated_texts=generations,
-                    reference_texts=test_data[output_column_name_test],
-                    original_texts=test_data[input_column_name],
-                    task=config.data.task,
-                    config=config.evaluation,
-                    cache_dir=cache_dir,
-                )
+            metrics: dict[str, float] = compute_metrics(
+                generated_texts=generations,
+                reference_texts=test_data[output_column_name_test],
+                original_texts=test_data[input_column_name],
+                task=config.data.task,
+                config=config.evaluation,
+                cache_dir=cache_dir,
+            )
         else:
             if "bfcl" in config.data.test_split_name:
                 test_split_name = config.data.test_split_name.split("bfcl_")[1]
@@ -270,19 +274,19 @@ Prompt:\n{config.data.system_prompt}
                     available_metrics=available_metrics,
                 )
             )
-            save_log_iter_results(
-                config=config,
-                workdir=workdir,
-                iter_dir=iter_dir,
-                metrics=metrics,
-                generations=generations,
-                al_iter=0,
-                train_result={},
-                model=None,
-                tokenizer=None,
-            )
+        save_log_iter_results(
+            config=config,
+            workdir=workdir,
+            iter_dir=iter_dir,
+            metrics=metrics,
+            generations=generations,
+            al_iter=0,
+            train_result={},
+            model=None,
+            tokenizer=None,
+        )
 
-    # Start AL cycle. Use `num_al_iterations + 2` because we do not label data
+    # Start AL cycle. Use `num_al_iterations + 1` because we do not label data
     # but want to train the model on the last iteration.
     
     start_iter = 1 if init_query_size_is_positive else 0

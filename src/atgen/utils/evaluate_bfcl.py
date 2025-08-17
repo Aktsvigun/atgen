@@ -101,9 +101,11 @@ def _evaluate_bfcl(
         cwd = os.getcwd()
         os.chdir(bfcl_results_dir)
         model_name = save_dir
-    del model, tokenizer
-    gc.collect()
-    cuda.empty_cache()
+        # Free up memory
+        del model, tokenizer
+        gc.collect()
+        cuda.empty_cache()
+        model = None
 
     logger.info(f"Starting BFCL evaluation for model: {model_name}")
     logger.info(f"Test category: {test_category}")
@@ -207,7 +209,8 @@ def _extract_metrics(bfcl_results_dir: Path) -> dict[str, float]:
             [v for k, v in non_live_metrics.items() if "simple" in k.lower()]
         )
     non_live_metrics["Non-live Overall"] = np.mean([
-        v for k, v in non_live_metrics.items() if k.lower() in NON_LIVE_COLUMNS_FOR_OVERALL
+        v for k, v in non_live_metrics.items()
+        if k.strip("Non-live ") in NON_LIVE_COLUMNS_FOR_OVERALL
     ])
 
     live_metrics = pd.read_csv(bfcl_results_dir / "score" / "data_live.csv").iloc[-1, 2:].dropna().to_dict()

@@ -25,8 +25,9 @@ al:
     init_query_size: 10
     query_size: 10
     num_iterations: 5
-    evaluate_zero_iteration: True
+    eval_zero_iteration: True
     subsample_size: -1
+    query_ids_path: null
     required_performance:
         rouge1: 0.5
     budget:
@@ -51,8 +52,8 @@ model:
 training:
     dev_split_size: 0.2
     hyperparameters:
-        num_epochs: 5
-        train_batch_size: 6
+        num_epochs: 15
+        train_batch_size: 8
         eval_batch_size: 4
         gradient_accumulation_steps: 2
         lr: 0.00003
@@ -63,7 +64,7 @@ training:
         model_max_length: ${model.model_max_length}
         dataset_num_proc: ${data.num_proc}
         packing: False
-        lr_scheduler_type: cosine
+        lr_scheduler_type: linear
         gradient_checkpointing: True
 
 
