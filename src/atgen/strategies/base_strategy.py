@@ -2,10 +2,6 @@ from abc import ABC, abstractmethod
 import random
 
 from datasets import Dataset
-from transformers import (
-    PreTrainedModel,
-    PreTrainedTokenizer,
-)
 
 
 class BaseStrategy(ABC):
@@ -15,13 +11,10 @@ class BaseStrategy(ABC):
     @abstractmethod
     def __call__(
         self,
-        model: PreTrainedModel,
-        tokenizer: PreTrainedTokenizer,
         unlabeled_pool: Dataset,
-        labeled_pool: Dataset,
-        input_column_name: str,
-        output_column_name: str,
         num_to_label: int,
+        *args,
+        **kwargs,
     ) -> list[int]:
         pass
 

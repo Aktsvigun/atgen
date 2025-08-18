@@ -109,7 +109,7 @@ def generate_vllm(
         generations=generations,
         data_config=data_config,
         model_name=llm_runner.llm_engine.model_config.model,
-        framework=VLLM_FRAMEWORK
+        framework=VLLM_FRAMEWORK,
     )
     if delete_vllm_after_inference:
         del llm_runner
@@ -210,7 +210,7 @@ def generate_sglang(
         generations=generations,
         data_config=data_config,
         model_name=model_path,
-        framework=SGLANG_FRAMEWORK
+        framework=SGLANG_FRAMEWORK,
     )
     # Clean up
     engine.shutdown()
@@ -258,9 +258,7 @@ def generate_transformers(
                 batch["input_ids"].to(model.device),
                 attention_mask=batch["attention_mask"].to(model.device),
                 max_new_tokens=inference_config.max_new_tokens,
-                temperature=inference_config.get(
-                    "temperature", DEFAULT_TEMPERATURE
-                ),
+                temperature=inference_config.get("temperature", DEFAULT_TEMPERATURE),
                 top_p=inference_config.get("top_p", DEFAULT_TOP_P),
                 return_dict_in_generate=True,
                 output_scores=True,
@@ -280,7 +278,7 @@ def generate_transformers(
         generations=generations,
         data_config=data_config,
         model_name=model.name_or_path,
-        framework=TRANSFORMERS_FRAMEWORK
+        framework=TRANSFORMERS_FRAMEWORK,
     )
     _maybe_display_generations(generations, inference_config.num_display_generations)
     return generations
@@ -337,11 +335,16 @@ def tokenize_conversational_example(
     example: dict[str, Any], tokenizer: PreTrainedTokenizer, data_config: DictConfig
 ) -> dict[str, list[int]]:
     if data_config.assistant_response_start:
-        input_ids = tokenizer.apply_chat_template(example["messages"], continue_final_message=True)
+        input_ids = tokenizer.apply_chat_template(
+            example["messages"], continue_final_message=True
+        )
     else:
-        input_ids = tokenizer.apply_chat_template(example["messages"], add_generation_prompt=True)
+        input_ids = tokenizer.apply_chat_template(
+            example["messages"], add_generation_prompt=True
+        )
     attention_mask = [1 for _ in range(len(input_ids))]
     return {"input_ids": input_ids, "attention_mask": attention_mask}
+
 
 def _maybe_display_generations(generations: list[str], num_display_gens: int):
     if num_display_gens:

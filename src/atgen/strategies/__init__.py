@@ -19,4 +19,12 @@ STRATEGIES = {
     "bleuvar": BLEUVarStrategy,
     "idds": IDDSStrategy,
     "dual": DualStrategy,
+    "kek": RandomStrategy,
+    "kek2": RandomStrategy,
+    "kek3": RandomStrategy,
+    "kek4": RandomStrategy,
+    "kek5": RandomStrategy,
+    "kek6": RandomStrategy,
+    "random1": RandomStrategy,
+    "random2": RandomStrategy,
 }

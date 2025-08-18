@@ -22,6 +22,7 @@ OUTPUT_FILE_PATH = f"{TMP_DIR}/batch_output.jsonl"
 MAX_NUM_TRIES = 3
 UPDATE_TIME_IN_SECONDS = 10  # update time when checking for the completion
 
+
 class OpenAILabeller(BaseLabeler):
     def __init__(
         self,
@@ -105,7 +106,7 @@ class OpenAILabeller(BaseLabeler):
         # TODO: make a parameter
         for i, annotation in enumerate(annotations[:2]):
             print(f"Annotation of the {i+1}th instance: {annotation}")
-            print("-"*100)
+            print("-" * 100)
         return dataset
 
     def _batched_call(self, dataset: Dataset) -> Dataset:

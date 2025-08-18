@@ -17,6 +17,7 @@ name: base
 output_dir: outputs
 offline_mode: False
 cache_dir: cache
+save_model: False
 seed: 42
 al:
     # Strategy configuration now loaded from configs/al/<strategy>.yaml
@@ -24,7 +25,7 @@ al:
     init_query_size: 10
     query_size: 10
     num_iterations: 5
-    evaluate_zero_iteration: True
+    eval_zero_iteration: True
     subsample_size: -1
     required_performance:
         rouge1: 0.5
@@ -39,9 +40,9 @@ model:
     assistant_response_start: "<think>\n\n</think>\n\n"
     peft:
         use: True
-        r: 64
-        lora_alpha: 64
-        lora_dropout: 0.1
+        r: 32
+        lora_alpha: 32
+        lora_dropout: 0.
         bias: 'none'
         seed: ${seed}
         use_gradient_checkpointing: 'unsloth'
@@ -50,8 +51,8 @@ model:
 training:
     dev_split_size: 0.2
     hyperparameters:
-        num_epochs: 5
-        train_batch_size: 6
+        num_epochs: 15
+        train_batch_size: 8
         eval_batch_size: 4
         gradient_accumulation_steps: 2
         lr: 0.00003
@@ -62,7 +63,7 @@ training:
         model_max_length: ${model.model_max_length}
         dataset_num_proc: ${data.num_proc}
         packing: False
-        lr_scheduler_type: cosine
+        lr_scheduler_type: linear
         gradient_checkpointing: True
 
 
@@ -75,6 +76,7 @@ inference:
     temperature: 0.6
     model: ${model.checkpoint}
     num_display_generations: 5
+    num_threads_for_bfcl: 32
 
 evaluation:
     additional_metrics: []
@@ -88,13 +90,3 @@ evaluation:
     deepeval_async_mode: True
     deepeval_verbose_mode: False
     deepeval_truths_extraction_limit: 10
-
-data:
-    assistant_response_start: ${model.assistant_response_start}
-    # test_subset_size: 3
-    # train_subset_size: 100
-    dataset: SpeedOfMagic/gigaword_tiny
-    input_max_length: 100
-    output_max_length: 20
-    is_in_conversational_format: false
-    use_test_benchmark: false
