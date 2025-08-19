@@ -66,18 +66,14 @@ def validate_and_fill_config(config: DictConfig) -> DictConfig:
             OmegaConf.update(
                 config,
                 "data.train_output_column_name",
-                get_output_column_name_for_phase(
-                    config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TRAIN
-                ),
+                get_output_column_name_for_phase(config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TRAIN),
                 force_add=True,
             )
         if "test_output_column_name" not in config.data:
             OmegaConf.update(
                 config,
                 "data.test_output_column_name",
-                get_output_column_name_for_phase(
-                    config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TEST
-                ),
+                get_output_column_name_for_phase(config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TEST),
                 force_add=True,
             )
 

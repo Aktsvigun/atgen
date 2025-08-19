@@ -4,10 +4,7 @@ log = logging.getLogger()
 
 
 def check_performance_against_requirements(
-    metrics,
-    required_performance_dict,
-    is_metrics_availability_checked,
-    available_metrics,
+    metrics, required_performance_dict, is_metrics_availability_checked, available_metrics
 ):
     """
     Check if the computed metrics meet the required performance thresholds.

@@ -25,7 +25,6 @@ def to_string(model_name: str):
     """
     return model_name.replace("/", "__")
 
-
 def register_resolvers() -> None:
     """Register all custom resolvers with OmegaConf"""
     # Register resolvers only if they are not already registered
