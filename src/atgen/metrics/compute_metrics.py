@@ -81,24 +81,13 @@ def compute_metrics(
     elif task == "open-qa":
         metrics_to_calculate = ["exact_match"] + list(config.additional_metrics)
     elif task == "summarization":
-        metrics_to_calculate = [
-            "exact_match",
-            "sacrebleu",
-            "bleu",
-            "rouge",
-            "word_length",
-        ] + list(config.additional_metrics)
+        metrics_to_calculate = ["exact_match", "sacrebleu", "bleu", "rouge", "word_length"] + list(config.additional_metrics)
     elif task == "translation":
-        metrics_to_calculate = [
-            "exact_match",
-            "sacrebleu",
-            "bleu",
-            "word_length",
-        ] + list(config.additional_metrics)
+        metrics_to_calculate = ["exact_match", "sacrebleu", "bleu", "word_length"] + list(config.additional_metrics)
     elif task == "math":
         metrics_to_calculate = ["exact_match_math"] + list(config.additional_metrics)
     else:
-        raise NotImplementedError(f"Task {task} not implemented")
+        raise NotImplementedError(f"Task {task} not implemented")   
 
     if "sacrebleu" in metrics_to_calculate:
         sacrebleu = load("sacrebleu", cache_dir=cache_dir)
@@ -135,19 +124,13 @@ def compute_metrics(
             if isinstance(reference_texts[0], list):
                 result["exact_match"] = np.array(
                     [
-                        any(
-                            _preprocess_text(pred) == _preprocess_text(one_ref)
-                            for one_ref in ref
-                        )
+                        any(_preprocess_text(pred) == _preprocess_text(one_ref) for one_ref in ref)
                         for pred, ref in zip(generated_texts, reference_texts)
                     ]
                 )
             else:
                 result["exact_match"] = np.array(
-                    [
-                        _preprocess_text(pred) == _preprocess_text(ref)
-                        for pred, ref in zip(generated_texts, reference_texts)
-                    ]
+                    [_preprocess_text(pred) == _preprocess_text(ref) for pred, ref in zip(generated_texts, reference_texts)]
                 )
         if "exact_match_math" in metrics_to_calculate:
             # result["exact_match_math"] = np.array(
@@ -212,14 +195,10 @@ def compute_metrics(
                     ]
                 )
             else:
-                ref_word_lengths = np.array(
-                    [len(ref.split()) for ref in reference_texts]
-                )
+                ref_word_lengths = np.array([len(ref.split()) for ref in reference_texts])
             # Avoid division by zero
             ref_word_lengths_safe = np.where(ref_word_lengths > 0, ref_word_lengths, 1)
-            result["word_length_rel"] = (
-                result["word_length_gen"] / ref_word_lengths_safe
-            )
+            result["word_length_rel"] = result["word_length_gen"] / ref_word_lengths_safe
 
         # AlignScore
         if "alignscore" in metrics_to_calculate and is_alignscore_available:
@@ -296,42 +275,31 @@ def compute_metrics(
 
     return result
 
-
-def _preprocess_text(
-    text: str,
-    do_lowercase: bool = True,
-    do_remove_punctuation: bool = True,
-    do_remove_extra_spaces: bool = True,
-    do_remove_stopwords: bool = False,
-    stopwords: Optional[list[str]] = None,
-) -> str:
-    # Convert to lowercase
-    if do_lowercase:
-        text = text.lower()
-
-    # Remove punctuation
-    if do_remove_punctuation:
-        # Keep hyphens within words, remove other punctuation
-        text = re.sub(r"(?<!\w)-|-(?!\w)", " ", text)  # Replace standalone hyphens
-        translator = str.maketrans("", "", string.punctuation.replace("-", ""))
-        text = text.translate(translator)
-        text = re.sub(
-            r"(?<!\w)-(?!\w)", "", text
-        )  # Remove remaining standalone hyphens
-
-    # Normalize whitespace
-    if do_remove_extra_spaces:
-        text = " ".join(text.split())
-
-    # Remove stopwords
-    if do_remove_stopwords:
-        if stopwords is None:
-            import nltk
-
-            nltk.download("stopwords")
-            stopwords = nltk.corpus.stopwords.words("english")
-        words = text.split()
-        words = [w for w in words if w not in stopwords]
-        text = " ".join(words)
-
-    return text.strip()
+def _preprocess_text(text: str, do_lowercase: bool = True, do_remove_punctuation: bool = True, do_remove_extra_spaces: bool = True, do_remove_stopwords: bool = False, stopwords: Optional[list[str]] = None) -> str:
+        # Convert to lowercase
+        if do_lowercase:
+            text = text.lower()
+        
+        # Remove punctuation
+        if do_remove_punctuation:
+            # Keep hyphens within words, remove other punctuation
+            text = re.sub(r'(?<!\w)-|-(?!\w)', ' ', text)  # Replace standalone hyphens
+            translator = str.maketrans('', '', string.punctuation.replace('-', ''))
+            text = text.translate(translator)
+            text = re.sub(r'(?<!\w)-(?!\w)', '', text)  # Remove remaining standalone hyphens
+        
+        # Normalize whitespace
+        if do_remove_extra_spaces:
+            text = ' '.join(text.split())
+        
+        # Remove stopwords
+        if do_remove_stopwords:
+            if stopwords is None:
+                import nltk
+                nltk.download('stopwords')
+                stopwords = nltk.corpus.stopwords.words('english')
+            words = text.split()
+            words = [w for w in words if w not in stopwords]
+            text = ' '.join(words)
+        
+        return text.strip()

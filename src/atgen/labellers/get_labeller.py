@@ -12,7 +12,7 @@ from . import (
 def get_labeller(
     config: DictConfig,
     output_column_name: str = "output",
-    budget: int | float = 1_000_000,
+    budget: int = 1_000_000,
     workdir: str | Path = "tmp",
     **kwargs,
 ):

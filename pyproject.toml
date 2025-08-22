@@ -39,7 +39,6 @@ classifiers = [
 
 [project.scripts]
 run-al = "atgen.run_scripts.run_active_learning:main"
-run-ss = "atgen.run_scripts.run_subset_selection:main"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
