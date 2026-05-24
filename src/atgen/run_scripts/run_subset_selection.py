@@ -29,6 +29,8 @@ def run_subset_selection(config, workdir: Union[str, Path]):
         load_data,
         prepare_conversational_data,
         maybe_get_few_shot_examples,
+        get_effective_data_config,
+        get_phase_input_column_name,
     )
     from atgen.utils.load_model_tokenizer import load_model_tokenizer
     from atgen.utils.prepare_model_for_training import prepare_model_for_training
@@ -95,10 +97,13 @@ Prompt:\n{config.data.system_prompt}
             cache_dir=config.cache_dir,
             seed=seed,
         )
-    # TODO: make better. Current workaround for multi-choice QA.
-    if config.data.get("processed_input_column_name", None) is not None:
-        config.data.input_column_name = config.data.processed_input_column_name
-    input_column_name = config.data.input_column_name
+    # Phase-aware input column names (the multi-choice loader sets
+    # `processed_input_column_name` after preprocessing; eval_dataset can also
+    # remap the test side to a different schema).
+    input_column_name_train = get_phase_input_column_name(config.data, "train")
+    input_column_name_test = get_phase_input_column_name(config.data, "test")
+    test_data_config = get_effective_data_config(config.data, "test")
+    input_column_name = input_column_name_train  # backward-compat alias
     # After loading data, need to calculate the query size if it is proportional to the dataset size
     if config.al.init_query_size is None:
         config.al.init_query_size = int(len(unlabeled_data) * config.al.init_query_size)
@@ -113,7 +118,16 @@ Prompt:\n{config.data.system_prompt}
         checkpoint=model_name, model_config=config.model, cache_dir=cache_dir
     )
 
-    if config.al.query_ids_path:
+    labeller: BaseLabeler = get_labeller(
+        config.labeller,
+        output_column_name=output_column_name_train,
+        cache_dir=cache_dir,
+        budget=budget,
+        workdir=workdir,  # if labeller is a human
+        data_config=config.data,  # if labeller is a custom LLM on transformers
+        model_config=config.model,  # if labeller is a custom LLM on transformers
+    )
+    if getattr(config.al, "query_ids_path", None):
         with open(config.al.query_ids_path, "r") as f:
             labeled_ids = json.load(f)[:al_query_size]
         log.info(f"Loaded {len(labeled_ids)} labeled ids from {config.al.query_ids_path}")
@@ -131,18 +145,6 @@ Prompt:\n{config.data.system_prompt}
             cache_dir=cache_dir,  # for hadas, huds, graph_cut
             seed=seed,
             **config.al.strategy_kwargs,
-        )
-
-        print("Loading labeller...")
-        # TODO: unsure whether need to log here since may be confusing for a human labeller
-        labeller: BaseLabeler = get_labeller(
-            config.labeller,
-            output_column_name=output_column_name_train,
-            cache_dir=cache_dir,
-            budget=budget,
-            workdir=workdir,  # if labeller is a human
-            data_config=config.data,  # if labeller is a custom LLM on transformers
-            model_config=config.model,  # if labeller is a custom LLM on transformers
         )
         print("Calculating query_ids")
         labeled_ids: list[int] = ss_strategy(
@@ -210,8 +212,8 @@ Prompt:\n{config.data.system_prompt}
             metrics: dict[str, float] = compute_metrics(
                 generated_texts=generations,
                 reference_texts=test_data[output_column_name_test],
-                original_texts=test_data[input_column_name],
-                task=config.data.task,
+                original_texts=test_data[input_column_name_test],
+                task=test_data_config.task,
                 config=config.evaluation,
                 cache_dir=cache_dir,
             )
@@ -322,8 +324,8 @@ Prompt:\n{config.data.system_prompt}
             metrics: dict[str, float] = compute_metrics(
                 generated_texts=generations,
                 reference_texts=test_data[output_column_name_test],
-                original_texts=test_data[input_column_name],
-                task=config.data.task,
+                original_texts=test_data[input_column_name_test],
+                task=test_data_config.task,
                 config=config.evaluation,
                 cache_dir=cache_dir,
             )

@@ -1,4 +1,5 @@
 import string
+from collections import Counter
 from time import time
 import logging
 from typing import Literal, Optional
@@ -14,7 +15,6 @@ from .metrics import (
     calculate_bart_score,
     calculate_alignscore,
     calculate_deepeval_metrics,
-    is_bart_score_available,
     is_alignscore_available,
 )
 from .deepeval_supported_models_and_metrics import API_MODELS, DEEPEVAL_METRICS
@@ -79,7 +79,7 @@ def compute_metrics(
     if task == "multi-choice-qa":
         metrics_to_calculate = ["exact_match"] + list(config.additional_metrics)
     elif task == "open-qa":
-        metrics_to_calculate = ["exact_match"] + list(config.additional_metrics)
+        metrics_to_calculate = ["exact_match", "token_f1"] + list(config.additional_metrics)
     elif task == "summarization":
         metrics_to_calculate = [
             "exact_match",
@@ -115,7 +115,7 @@ def compute_metrics(
 
     # Metrics that use both the generated texts and the original texts and
     # those that do not require reference texts
-    if "bartscore" in metrics_to_calculate and is_bart_score_available:
+    if "bartscore" in metrics_to_calculate:
         log.info("Calculating BARTScore scores...")
         start_time = time()
         result.update(
@@ -149,16 +149,25 @@ def compute_metrics(
                         for pred, ref in zip(generated_texts, reference_texts)
                     ]
                 )
+        if "token_f1" in metrics_to_calculate:
+            if isinstance(reference_texts[0], list):
+                result["token_f1"] = np.array(
+                    [
+                        max(_token_f1(pred, one_ref) for one_ref in ref)
+                        for pred, ref in zip(generated_texts, reference_texts)
+                    ]
+                )
+            else:
+                result["token_f1"] = np.array(
+                    [
+                        _token_f1(pred, ref)
+                        for pred, ref in zip(generated_texts, reference_texts)
+                    ]
+                )
         if "exact_match_math" in metrics_to_calculate:
-            # result["exact_match_math"] = np.array(
-            #     [
-            #         pred.split("Answer: ")[-1].lower() == ref.lower()
-            #         for pred, ref in zip(generated_texts, reference_texts)
-            #     ]
-            # )
             result["exact_match_math"] = np.array(
                 [
-                    pred.split("#### ")[-1].lower() == ref.split("#### ")[-1].lower()
+                    _extract_math_answer(pred) == _extract_math_answer(ref)
                     for pred, ref in zip(generated_texts, reference_texts)
                 ]
             )
@@ -295,6 +304,45 @@ def compute_metrics(
     }
 
     return result
+
+
+_BOXED_RE = re.compile(r"\\boxed\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}")
+
+
+def _extract_math_answer(text: str) -> str:
+    """Pull the final answer out of a math generation/reference. Tries, in order:
+    `\\boxed{...}` (MATH/Hendrycks), `#### ` (GSM8K), `Answer: ` (OpenR1-Math),
+    then falls back to the trimmed string. Normalised via _preprocess_text so
+    `"42."` and `"42"` compare equal."""
+    if text is None:
+        return ""
+    boxed = _BOXED_RE.findall(text)
+    if boxed:
+        return _preprocess_text(boxed[-1])
+    if "#### " in text:
+        return _preprocess_text(text.split("#### ")[-1])
+    if "Answer: " in text:
+        return _preprocess_text(text.split("Answer: ")[-1])
+    return _preprocess_text(text)
+
+
+def _token_f1(pred: str, ref: str) -> float:
+    """SQuAD-style token-level F1 (the canonical metric for MuSiQue, HotpotQA,
+    SQuAD, TriviaQA, NQ, etc.). Normalises both strings, whitespace-tokenises,
+    then computes 2PR/(P+R) on the multiset intersection of tokens. Returns 1.0
+    when both are empty after normalisation; 0.0 when only one is empty."""
+    pred_tokens = _preprocess_text(pred).split()
+    ref_tokens = _preprocess_text(ref).split()
+    if not pred_tokens and not ref_tokens:
+        return 1.0
+    if not pred_tokens or not ref_tokens:
+        return 0.0
+    num_same = sum((Counter(pred_tokens) & Counter(ref_tokens)).values())
+    if num_same == 0:
+        return 0.0
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(ref_tokens)
+    return 2 * precision * recall / (precision + recall)
 
 
 def _preprocess_text(

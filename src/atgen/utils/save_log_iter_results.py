@@ -30,9 +30,13 @@ def save_log_iter_results(
         json.dump(metrics, f)
     with open(iter_dir / "generations.json", "w") as f:
         json.dump(generations, f)
+    log.info(f"Metrics saved to {iter_dir}")
     combine_results(workdir, al_iter)
 
     log.info(f"Iteration {al_iter}: saving the trained model...")
     if config.save_model and (model is not None):
         model.save_pretrained(workdir / "model")
         tokenizer.save_pretrained(workdir / "tokenizer")
+        # Also save tokenizer/processor alongside the weights so that vLLM can
+        # locate the (multimodal) preprocessor when loading from the model dir.
+        tokenizer.save_pretrained(workdir / "model")

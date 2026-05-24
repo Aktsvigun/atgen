@@ -63,6 +63,9 @@ class CustomLLMLabeller(BaseLabeler):
         model, tokenizer = self._load_model_and_tokenizer()
         model.save_pretrained(self.model_path / "model")
         tokenizer.save_pretrained(self.model_path / "tokenizer")
+        # Mirror tokenizer/processor files into the model dir so vLLM can
+        # locate the (multimodal) preprocessor configs alongside the weights.
+        tokenizer.save_pretrained(self.model_path / "model")
         del model, tokenizer
         gc.collect()
 

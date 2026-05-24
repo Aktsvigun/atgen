@@ -12,6 +12,7 @@ from peft import PeftModel
 from transformers import (
     PreTrainedModel,
     PreTrainedTokenizerFast,
+    ProcessorMixin,
     EarlyStoppingCallback,
 )
 from trl import SFTTrainer, SFTConfig, DataCollatorForCompletionOnlyLM
@@ -188,18 +189,20 @@ class DataCollatorForLastCompletionOnlyLM(DataCollatorForCompletionOnlyLM):
 
 
 def _get_response_instruction_templates(
-    tokenizer: PreTrainedTokenizerFast, model_config: Optional[DictConfig] = None
+    tokenizer: Union[PreTrainedTokenizerFast, ProcessorMixin], model_config: Optional[DictConfig] = None
 ) -> tuple[str, str]:
     """
     Determine the response and instruction templates based on the tokenizer and model config.
 
     Args:
-        tokenizer: The tokenizer to determine templates from
+        tokenizer: The tokenizer or processor to determine templates from
         model_config: Optional model configuration that may contain template information
 
     Returns:
         Tuple of (response_template, instruction_template)
     """
+    if isinstance(tokenizer, ProcessorMixin):
+        tokenizer = tokenizer.tokenizer
     if "gemma" in tokenizer.name_or_path.lower():
         response_template = "<start_of_turn>model\n"
         instruction_template = "<start_of_turn>user\n"
@@ -227,16 +230,98 @@ def _get_response_instruction_templates(
 def _get_data_collator(
     tokenizer: PreTrainedTokenizerFast, model_config: Optional[DictConfig] = None
 ) -> DataCollatorForLastCompletionOnlyLM:
-
-    response_template, instruction_template = _get_response_instruction_templates(
-        tokenizer, model_config
-    )
-    # Use the LastCompletionOnly collator instead of the regular one
+    # Derive the response/instruction markers as token ids directly from the
+    # tokenizer's own chat template — this matches how the trainer tokenizes the
+    # data and works regardless of whether the model uses ``<start_of_turn>``,
+    # ``<|turn>``, ``<|im_start|>``, ``<|start_header_id|>``, etc. Hardcoded
+    # marker strings break the moment a model ships with a new role-marker
+    # syntax (e.g. Gemma 4 uses ``<|turn>...<turn|>``).
+    response_template = _probe_response_marker(tokenizer)
+    instruction_template = _probe_instruction_marker(tokenizer)
+    if response_template is None or instruction_template is None:
+        response_template, instruction_template = _get_response_instruction_templates(
+            tokenizer, model_config
+        )
     return DataCollatorForLastCompletionOnlyLM(
         tokenizer=tokenizer,
         response_template=response_template,
         instruction_template=instruction_template,
     )
+
+
+def _probe_response_marker(
+    tokenizer: PreTrainedTokenizerFast,
+) -> Optional[List[int]]:
+    if isinstance(tokenizer, ProcessorMixin):
+        tokenizer = tokenizer.tokenizer
+    try:
+        msgs = [{"role": "user", "content": "X"}]
+        with_p = list(
+            tokenizer.apply_chat_template(
+                msgs, tokenize=True, add_generation_prompt=True
+            )
+        )
+        without_p = list(
+            tokenizer.apply_chat_template(
+                msgs, tokenize=True, add_generation_prompt=False
+            )
+        )
+    except Exception:
+        return None
+    if len(with_p) <= len(without_p) or with_p[: len(without_p)] != without_p:
+        return None
+    return with_p[len(without_p):]
+
+
+def _probe_instruction_marker(
+    tokenizer: PreTrainedTokenizerFast,
+) -> Optional[List[int]]:
+    if isinstance(tokenizer, ProcessorMixin):
+        tokenizer = tokenizer.tokenizer
+    placeholder = "USRMARKERPROBEUNIQUEZZZ"
+    msgs_short = [
+        {"role": "user", "content": "A"},
+        {"role": "assistant", "content": "B"},
+    ]
+    msgs_full = msgs_short + [{"role": "user", "content": placeholder}]
+    try:
+        rendered_full = tokenizer.apply_chat_template(msgs_full, tokenize=False)
+        rendered_short = tokenizer.apply_chat_template(msgs_short, tokenize=False)
+    except Exception:
+        return None
+    if not rendered_full.startswith(rendered_short):
+        return None
+    pos_placeholder = rendered_full.find(placeholder)
+    if pos_placeholder < 0:
+        return None
+
+    try:
+        enc = tokenizer(
+            rendered_full, add_special_tokens=False, return_offsets_mapping=True
+        )
+    except (TypeError, ValueError, NotImplementedError):
+        return None
+    ids_full = list(enc["input_ids"])
+    offsets = list(enc["offset_mapping"])
+    try:
+        ids_short = list(
+            tokenizer(rendered_short, add_special_tokens=False).input_ids
+        )
+    except Exception:
+        return None
+    if ids_full[: len(ids_short)] != ids_short:
+        return None
+
+    marker_tokens: List[int] = []
+    for i in range(len(ids_short), len(ids_full)):
+        s, e = offsets[i]
+        # Special tokens often have (0, 0) offsets and contribute no rendered chars;
+        # always include them. For anything else, stop once we cross into the
+        # placeholder content.
+        if (s, e) != (0, 0) and s >= pos_placeholder:
+            break
+        marker_tokens.append(ids_full[i])
+    return marker_tokens or None
 
 
 def _get_train_eval_datasets(
@@ -251,6 +336,9 @@ def _get_train_eval_datasets(
         batched=True,
         fn_kwargs={"tokenizer": tokenizer, "data_collator": data_collator},
     ).filter(lambda x: x[TEXT_FIELD] != "")
+    logger.warning(
+        f"Truncated {orig_train_data_len - len(train_data)} examples from train set."
+    )
     if eval_data is not None:
         orig_eval_data_len = len(eval_data)
         eval_data = eval_data.map(
@@ -258,12 +346,9 @@ def _get_train_eval_datasets(
             batched=True,
             fn_kwargs={"tokenizer": tokenizer, "data_collator": data_collator},
         ).filter(lambda x: x[TEXT_FIELD] != "")
-    logger.warning(
-        f"Truncated {orig_train_data_len - len(train_data)} examples from train set."
-    )
-    logger.warning(
-        f"Truncated {orig_eval_data_len - len(eval_data)} examples from eval set."
-    )
+        logger.warning(
+            f"Truncated {orig_eval_data_len - len(eval_data)} examples from eval set."
+        )
     return train_data, eval_data
 
 
@@ -307,7 +392,7 @@ def _formatting_fn(examples, tokenizer: PreTrainedTokenizerFast):
 def get_trainer(
     config: DictConfig,
     model: PreTrainedModel | PeftModel,
-    tokenizer: PreTrainedTokenizerFast,
+    tokenizer: PreTrainedTokenizerFast | ProcessorMixin,
     train_data: Dataset,
     eval_data: Dataset | None,
     output_dir: str | Path,
@@ -316,6 +401,11 @@ def get_trainer(
     train_args = _get_training_args(
         config.training.hyperparameters, train_data, eval_data, seed, output_dir
     )
+    if isinstance(tokenizer, ProcessorMixin):
+        processor = tokenizer
+        tokenizer = processor.tokenizer
+    else:
+        processor = None
     data_collator = _get_data_collator(tokenizer, config.model)
     callbacks = (
         [
@@ -336,7 +426,7 @@ def get_trainer(
 
     return SFTTrainer(
         model=model,
-        processing_class=tokenizer,
+        processing_class=tokenizer if processor is None else processor,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         args=train_args,

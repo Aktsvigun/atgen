@@ -25,6 +25,8 @@ STRATEGIES = {
     "kek4": RandomStrategy,
     "kek5": RandomStrategy,
     "kek6": RandomStrategy,
+    "kek7": RandomStrategy,
+    "kek8": RandomStrategy,
     "random1": RandomStrategy,
     "random2": RandomStrategy,
 }

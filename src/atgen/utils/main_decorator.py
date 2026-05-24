@@ -1,5 +1,6 @@
 import logging
 import os
+import warnings
 from pathlib import Path
 
 import hydra
@@ -11,7 +12,17 @@ from .resolvers import register_resolvers
 from .downloaders import maybe_download_packages
 
 
+# Register resolvers at import time so they're available when Hydra resolves
+# interpolations in `hydra.run.dir` (which happens before run_script is called).
+register_resolvers()
+
 os.environ["WANDB_DISABLED"] = "true"
+
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"transformers\.modeling_attn_mask_utils",
+)
 
 log = logging.getLogger()
 

@@ -1,8 +1,8 @@
 hydra:
   run:
-    dir: ${output_dir}/${now:%Y-%m-%d}/${experiment_name}_${now:%H-%M-%S}
+    dir: ${output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${experiment_name}_${random_suffix:}
   sweep:
-    dir: ${output_dir}/${now:%Y-%m-%d}/${experiment_name}_${now:%H-%M-%S}
+    dir: ${output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${experiment_name}_${random_suffix:}
     subdir: ${hydra.job.num}
 
 
@@ -32,12 +32,12 @@ al:
     budget:
 
 model:
-    checkpoint: Qwen/Qwen3-1.7B
+    checkpoint: unsloth/Qwen3-4B-Instruct-2507
     quantize: False
     model_max_length: ${multiply_with_few_shot:${data.input_max_length},${data.few_shot.count}}
     dtype: bfloat16
     save_in_fp_32: false
-    assistant_response_start: "<think>\n\n</think>\n\n"
+    assistant_response_start: ""
     peft:
         use: True
         r: 32
@@ -70,13 +70,18 @@ training:
 inference:
     framework: 'vllm'
     max_new_tokens: ${data.output_max_length}
-    batch_size: 8
+    batch_size: 128
     gpu_memory_utilization: 0.5
-    top_p: 0.1
-    temperature: 0.6
+    temperature: 0.7
+    top_p: 0.8
+    top_k: 20
+    presence_penalty: 2.0
+    enable_thinking: False
+    seed: ${seed}
     model: ${model.checkpoint}
     num_display_generations: 5
     num_threads_for_bfcl: 32
+    model_max_length: ${model.model_max_length}
 
 evaluation:
     additional_metrics: []

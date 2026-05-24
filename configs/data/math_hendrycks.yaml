@@ -1,0 +1,24 @@
+# Hendrycks MATH (competition_math; 7.5k train / 5k test).
+# Run once before using this config:
+#   python -m atgen.utils.data.preprocess_math --out cache/math_hendrycks_preprocessed
+# (Extracts \boxed{...} into a clean `answer` column and keeps the full LaTeX
+# solution as `short_solution`. See src/atgen/utils/data/preprocess_math.py.)
+#
+# Headline metric is `exact_match_math`, which now extracts \boxed{...} from
+# both prediction and reference (compute_metrics._extract_math_answer).
+
+dataset: 'cache/math_hendrycks_preprocessed'
+input_column_name: 'problem'
+output_column_name: {'train': 'short_solution', 'test': 'answer'}
+unlabeled_data_split_name: train
+test_split_name: test
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 2048
+output_max_length: 2048
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: "Solve the math problem. Show your reasoning, then put the final answer inside \\boxed{...} on the last line."
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'math'

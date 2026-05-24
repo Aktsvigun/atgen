@@ -27,22 +27,12 @@ from transformers import (
 log = logging.getLogger(__name__)
 
 try:
-    from .bart_score import BARTScorer
-
-    is_bart_score_available = True
-except ImportError:
-    log.warning(
-        "BARTScorer not found, please install it (see `install.sh`). Skipping the BARTScore metric."
-    )
-    is_bart_score_available = False
-
-try:
     from alignscore import AlignScore
 
     is_alignscore_available = True
 except ImportError:
     log.warning(
-        "AlignScore not found, please install it (see `install.sh`). Skipping the AlignScore metric."
+        "AlignScore not found, please install it via `pip install alignscore-SpeedOfMagic`. Skipping the AlignScore metric."
     )
     is_alignscore_available = False
 
@@ -138,8 +128,6 @@ def calculate_bart_score(
     aggregate=True,
     cache_dir: str = "cache",
 ):
-    if not is_bart_score_available:
-        return None
     if scorer is None:
         scorer = BARTScorer(cache_dir=cache_dir)
     scores = {}

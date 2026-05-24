@@ -1,0 +1,4 @@
+strategy: random2
+strategy_kwargs:
+  lambda_: 0.999
+query_ids_path: /mnt/share/repos/atgen/outputs/ss_query_ids/gsm8k/random2.json

@@ -1,0 +1,30 @@
+# MedMCQA (medical 4-option MCQ; 183k train / 4.2k validation-as-test).
+# Run once before using this config:
+#   python -m atgen.utils.data.preprocess_medmcqa --out cache/medmcqa_preprocessed
+# (Bundles opa/opb/opc/opd into a `choices` list and converts cop int → A/B/C/D
+# letter. See src/atgen/utils/data/preprocess_medmcqa.py.)
+
+dataset: 'cache/medmcqa_preprocessed'
+input_column_name: {"question": "question", "options": "choices"}
+output_column_name: 'answer'
+unlabeled_data_split_name: train
+test_split_name: test
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 1024
+output_max_length: 1
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: Please answer the medical question. Output only the letter (A, B, C, or D) of the correct option — no explanation.
+user_prompt_template: |
+    Question:
+    {question}
+
+    Options:
+    {options}
+
+    Correct answer (only the letter):
+
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'multi-choice-qa'

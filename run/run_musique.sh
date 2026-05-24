@@ -1,0 +1,66 @@
+#!/bin/bash
+# Random-selection AL sweep on MuSiQue (multi-hop QA).
+#
+# Prereq (one-time): preprocess MuSiQue into cache/musique_preprocessed/
+#     python -m atgen.utils.data.preprocess_musique --out cache/musique_preprocessed
+#
+# This script sweeps query_size x seed for `al=random` on `data=musique`,
+# distributing jobs across 8 GPUs. Folders get a random hex prefix on
+# experiment_name so 8 parallel launches don't collide on the
+# ${experiment_name}_${now:%H-%M-%S} template in base.yaml.
+#
+# Aggregate after:
+#     python -m atgen.utils.aggregate_metrics outputs/$(date +%F)/*_musique_random_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]
+#
+# Headline metric on MuSiQue is `token_f1` (added to task: open-qa). `exact_match`
+# is reported alongside.
+
+set -uo pipefail
+
+NUM_GPUS=8
+DATA=musique
+PY=src/atgen/run_scripts/run_subset_selection.py
+EXP_NAME=musique_random
+
+query_sizes=(25 2500 5000)
+seeds=(42 1234567 31337)
+
+LOG_DIR=run/_musique_logs/$(date +%F_%H-%M-%S)
+mkdir -p "$LOG_DIR"
+
+# Bake in the Qwen3-Instruct-2507 fixes learned in earlier rounds:
+#   - empty assistant_response_start (no <think></think> stub on non-thinking models)
+#   - greedy decoding with no presence_penalty (deterministic, math/QA-friendly)
+COMMON_OVERRIDES="model.assistant_response_start='' inference.temperature=0 inference.top_p=1.0 inference.top_k=-1 inference.presence_penalty=0"
+
+echo "Launching $(( ${#query_sizes[@]} * ${#seeds[@]} )) jobs across ${NUM_GPUS} GPUs"
+echo "Logs -> $LOG_DIR"
+echo "Outputs -> outputs/$(date +%F)/<random>_${EXP_NAME}_<HH-MM-SS>/"
+echo
+
+idx=0
+for q in "${query_sizes[@]}"; do
+    for s in "${seeds[@]}"; do
+        gpu=$(( idx % NUM_GPUS ))
+        prefix=$(printf '%04x%04x' "$RANDOM" "$RANDOM")
+        logf="$LOG_DIR/job_$(printf '%03d' "$idx")_gpu${gpu}_q${q}_s${s}.log"
+        cmd="HYDRA_CONFIG_NAME=base python ${PY} \
+            al=random data=${DATA} \
+            al.query_size=${q} al.eval_zero_iteration=false \
+            seed=${s} \
+            experiment_name=${prefix}_${EXP_NAME} \
+            +debug=false \
+            ${COMMON_OVERRIDES}"
+        echo "[gpu=$gpu] q=$q seed=$s prefix=$prefix"
+        ( CUDA_VISIBLE_DEVICES=$gpu bash -c "$cmd" >"$logf" 2>&1 ) &
+        idx=$((idx + 1))
+        # Drain one batch of NUM_GPUS jobs before launching the next.
+        if (( idx % NUM_GPUS == 0 )); then wait; fi
+    done
+done
+wait
+
+echo
+echo "All runs finished."
+echo "Aggregate with:"
+echo "  python -m atgen.utils.aggregate_metrics outputs/$(date +%F)/*_${EXP_NAME}_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]"

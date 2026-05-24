@@ -13,13 +13,11 @@ else:
 
 
 from omegaconf import DictConfig
-from transformers import PreTrainedTokenizerFast
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
-    PreTrainedModel,
-    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+    ProcessorMixin,
 )
 
 
@@ -61,8 +59,11 @@ def load_model_tokenizer(
                 cache_dir=cache_dir,
                 trust_remote_code=True,
             )
-            tokenizer.model_max_length = model_config.model_max_length
             tokenizer.padding_side = "left"
+            if isinstance(tokenizer, ProcessorMixin):
+                tokenizer.tokenizer.model_max_length = model_config.model_max_length
+            else:
+                tokenizer.model_max_length = model_config.model_max_length
         else:
             kwargs = {
                 "cache_dir": cache_dir,
@@ -81,8 +82,10 @@ def load_model_tokenizer(
     if model is None:
         raise RuntimeError(f"Failed to load model after {NUM_TRIES_LOAD_MODEL} tries")
     if tokenizer.pad_token is None:
-        last_reserved_token = {v: k for k, v in tokenizer.vocab.items()}[
-            len(tokenizer) - 1
-        ]
+        if isinstance(tokenizer, ProcessorMixin):
+            vocab = tokenizer.tokenizer.vocab
+        else:
+            vocab = tokenizer.vocab
+        last_reserved_token = {v: k for k, v in vocab.items()}[len(vocab) - 1]
         tokenizer.pad_token = last_reserved_token
     return model, tokenizer

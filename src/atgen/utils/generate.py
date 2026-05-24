@@ -50,25 +50,24 @@ def generate_vllm(
     TODO: improve the description.
     Function for generating with the vLLM framework.
     Requires either model + tokenizer + save_dir or the path to the saved model and tokenizer.
-    In the last case, they need to be stored inside "PATH/model" and "PATH/tokenizer".
     """
     from vllm import SamplingParams
 
     delete_vllm_after_inference = False
     if llm_runner is None:
         if model_tokenizer_dir is None:
-            model.save_pretrained(f"{save_dir}/model")
-            tokenizer.save_pretrained(f"{save_dir}/tokenizer")
-            model_tokenizer_dir = save_dir
+            model_tokenizer_dir = str(save_dir)
+            model.save_pretrained(save_dir)
+            tokenizer.save_pretrained(save_dir)
         gpu_memory_utilization = getattr(
             inference_config, "gpu_memory_utilization", DEFAULT_GPU_MEMORY_UTILIZATION
         )
         llm_runner = LLM(
-            model=f"{model_tokenizer_dir}/model",
-            tokenizer=f"{model_tokenizer_dir}/tokenizer",
+            model=model_tokenizer_dir,
             gpu_memory_utilization=gpu_memory_utilization,  # TODO: make arbitrary
             dtype=bfloat16,
             trust_remote_code=True,
+            max_model_len=inference_config.model_max_length,
         )
         delete_vllm_after_inference = True
 
@@ -76,12 +75,19 @@ def generate_vllm(
     gc.collect()
     cuda.empty_cache()
 
-    sampling_params = SamplingParams(
-        temperature=inference_config.get("temperature", DEFAULT_TEMPERATURE),
-        seed=42,  # TODO: make arbitrary
-        max_tokens=inference_config.max_new_tokens,
-        top_p=inference_config.get("top_p", DEFAULT_TOP_P),
-    )
+    sampling_params = {
+        "max_tokens": inference_config.max_new_tokens,
+        "seed": inference_config.seed,
+    }
+    if "temperature" in inference_config:
+        sampling_params["temperature"] = inference_config.temperature
+    if "top_p" in inference_config:
+        sampling_params["top_p"] = inference_config.top_p
+    if "presence_penalty" in inference_config:
+        sampling_params["presence_penalty"] = inference_config.presence_penalty
+    if "top_k" in inference_config:
+        sampling_params["top_k"] = inference_config.top_k
+    sampling_params = SamplingParams(**sampling_params)
     if data_config.assistant_response_start:
         generation_params = {
             "add_generation_prompt": False,
@@ -139,15 +145,15 @@ def generate_sglang(
     # Determine the model path
     if model_tokenizer_dir is None:
         if model is not None and tokenizer is not None:
-            model.save_pretrained(f"{save_dir}/model")
-            tokenizer.save_pretrained(f"{save_dir}/tokenizer")
-            model_path = f"{save_dir}/model"
+            model.save_pretrained(save_dir)
+            tokenizer.save_pretrained(save_dir)
+            model_path = save_dir
         else:
             raise ValueError(
                 "Either model_tokenizer_dir or model and tokenizer must be provided"
             )
     else:
-        model_path = f"{model_tokenizer_dir}/model"
+        model_path = model_tokenizer_dir
 
     # Free up memory
     del model

@@ -2,10 +2,61 @@ import os
 from typing import Union
 
 from datasets import load_dataset, load_from_disk, Dataset, DatasetDict
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 from .get_output_column_name_for_phase import get_output_column_name_for_phase
 from ..constants import OUTPUT_FIELD_PURPOSE_TRAIN, OUTPUT_FIELD_PURPOSE_TEST
+
+
+def get_effective_data_config(data_config: DictConfig, split: str) -> DictConfig:
+    """Return the data config to use for a given split.
+
+    When ``data.eval_dataset`` is set, the test split uses ``eval_dataset.*``
+    overlaid on top of the base ``data.*`` config (deep merge). The train split
+    is unchanged. This lets you train on dataset A and evaluate on dataset B
+    with different schemas / prompts / tasks (e.g. Tulu-3 → MMLU).
+
+    Hydra puts ``config.data`` in struct mode, which would reject overlay keys
+    that don't already exist in the base (e.g. ``user_prompt_template`` for
+    multi-choice MMLU when the train pool is Tulu-3). We work around this by
+    materialising both sides as plain containers, merging, then re-wrapping —
+    so the result is an open DictConfig that accepts any field the overlay
+    introduces.
+    """
+    if split != OUTPUT_FIELD_PURPOSE_TEST:
+        return data_config
+    eval_overlay = data_config.get("eval_dataset")
+    if eval_overlay is None or len(eval_overlay) == 0:
+        return data_config
+    base_dict = OmegaConf.to_container(data_config, resolve=False)
+    overlay_dict = OmegaConf.to_container(eval_overlay, resolve=False)
+    merged_dict = _deep_merge(base_dict, overlay_dict)
+    merged_dict.pop("eval_dataset", None)
+    return OmegaConf.create(merged_dict)
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursive dict merge: overlay wins on leaves, both sides combine on
+    nested dicts. Non-dict overlay values fully replace the base value."""
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return overlay
+    out = dict(base)
+    for key, value in overlay.items():
+        if key in out and isinstance(out[key], dict) and isinstance(value, dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def get_phase_input_column_name(data_config: DictConfig, split: str):
+    """Effective input-column-name for a phase, accounting for the multi-choice
+    hack (``processed_input_column_name``) and the eval_dataset overlay."""
+    effective = get_effective_data_config(data_config, split)
+    return (
+        effective.get("processed_input_column_name")
+        or effective.input_column_name
+    )
 
 
 def _fetch_dataset(
@@ -105,31 +156,42 @@ def load_data(
     cache_dir: str,
     seed: int,
 ) -> Dataset:
+    effective = get_effective_data_config(data_config, split)
     if split == "train":
-        subset_name = data_config.get("train_split_name", split)
-        subset_size = data_config.get("train_subset_size")
+        subset_name = effective.get("train_split_name", split)
+        subset_size = effective.get("train_subset_size")
     elif split == "test":
-        subset_name = data_config.get("test_split_name", split)
-        subset_size = data_config.get("test_subset_size")
+        subset_name = effective.get("test_split_name", split)
+        subset_size = effective.get("test_subset_size")
     else:
         raise NotImplementedError(
             f"Unexpected split {split}; Please specify either `train` or `test`."
         )
     dataset = _fetch_dataset(
-        dataset_name_or_path=data_config.dataset,
+        dataset_name_or_path=effective.dataset,
         subset_name=subset_name,
-        fetch_kwargs=dict(data_config.fetch_kwargs, cache_dir=cache_dir),
+        fetch_kwargs=dict(effective.fetch_kwargs, cache_dir=cache_dir),
     )
     dataset = _preprocess_multicolumn_labels_if_needed(
         dataset=dataset,
-        output_column_names=data_config.output_column_name,
-        data_config=data_config,
+        output_column_names=effective.output_column_name,
+        data_config=effective,
         phase=split,
     )
-    if data_config.task == "multi-choice-qa":
+    if effective.task == "multi-choice-qa":
         dataset = _preprocess_multi_choice_qa(
-            dataset=dataset, data_config=data_config, split=split
+            dataset=dataset, data_config=effective, split=split
         )
+        # Mirror processed_input_column_name back to the eval_dataset overlay so
+        # downstream callers reading data_config can still see it via the helper.
+        if split == OUTPUT_FIELD_PURPOSE_TEST and effective is not data_config:
+            with open_dict(data_config):
+                if data_config.get("eval_dataset") is None:
+                    data_config.eval_dataset = {}
+                data_config.eval_dataset.processed_input_column_name = (
+                    effective.processed_input_column_name
+                )
+                data_config.eval_dataset.is_in_conversational_format = True
     # Add `id` column to the dataset (practical use) or to train subset (benchmarking)
     dataset = _add_id_column(dataset)
     if subset_size is not None:

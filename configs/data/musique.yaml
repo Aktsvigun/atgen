@@ -1,0 +1,22 @@
+# MuSiQue (multi-hop QA, ~20k train / ~2.4k validation-as-test).
+# Run once before using this config:
+#   python -m atgen.utils.data.preprocess_musique --out cache/musique_preprocessed
+# (Flattens paragraphs into a single prompt string and pre-computes the
+# answer-aliases list. See src/atgen/utils/data/preprocess_musique.py.)
+
+dataset: 'cache/musique_preprocessed'
+input_column_name: 'input'
+output_column_name: {'train': 'answer', 'test': 'all_answers'}
+unlabeled_data_split_name: train
+test_split_name: test
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 8192
+output_max_length: 64
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: |
+    Answer the question using only the information in the provided paragraphs. The answer must be a short, exact span (a name, number, or phrase). Do not explain, do not write a full sentence.
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'open-qa'

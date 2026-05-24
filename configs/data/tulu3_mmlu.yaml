@@ -1,0 +1,49 @@
+# Tulu-3 SFT-mixture (train pool, ~939k flat user+assistant rows) → MMLU (test).
+# This is the literature-canonical instruction-tuning AL setup
+# (DEITA/MIG-style: large general pool, eval on a knowledge benchmark).
+#
+# Prereqs (one-time):
+#   python -m atgen.utils.data.preprocess_tulu3 --out cache/tulu3_preprocessed
+#       (or --max-rows 50000 for a smaller pilot pool)
+#   python -m atgen.utils.data.preprocess_mmlu  --out cache/mmlu_preprocessed
+#
+# The `eval_dataset:` block overlays the test phase onto a different source
+# (see src/atgen/utils/data/load_data.py: get_effective_data_config). The
+# train side reads `dataset`, `output_column_name`, `system_prompt`, etc.
+# The test side reads `eval_dataset.*` (deep-merged onto the base).
+
+dataset: 'cache/tulu3_preprocessed'
+input_column_name: 'input'
+output_column_name: 'answer'
+unlabeled_data_split_name: train
+test_split_name: train          # placeholder; eval_dataset.test_split_name wins for the test load
+train_subset_size: null
+test_subset_size: 1_000
+input_max_length: 4096
+output_max_length: 1024
+fetch_kwargs: {}
+is_in_conversational_format: false
+system_prompt: ""
+assistant_response_start: ${model.assistant_response_start}
+use_test_benchmark: false
+task: 'open-qa'                 # only matters if we computed train-side metrics; not used by run scripts
+
+eval_dataset:
+  dataset: 'cache/mmlu_preprocessed'
+  test_split_name: test
+  input_column_name: {"question": "question", "options": "choices"}
+  output_column_name: 'answer'
+  test_subset_size: 1_000
+  input_max_length: 2048
+  output_max_length: 1
+  task: 'multi-choice-qa'
+  is_in_conversational_format: false   # gets flipped to True by the multi-choice loader
+  system_prompt: "Answer the multiple-choice question. Output only the letter (A, B, C, or D) of the correct option — no explanation."
+  user_prompt_template: |
+      Question:
+      {question}
+
+      Options:
+      {options}
+
+      Correct answer (only the letter):

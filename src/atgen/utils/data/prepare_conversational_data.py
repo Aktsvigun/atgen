@@ -3,6 +3,7 @@ from omegaconf import DictConfig
 
 from .get_preprocess_function import get_preprocess_function
 from .get_output_column_name_for_phase import get_output_column_name_for_phase
+from .load_data import get_effective_data_config
 
 
 def prepare_conversational_data(
@@ -12,7 +13,13 @@ def prepare_conversational_data(
     few_shot_examples: Dataset | None = None,
     model_name: str = "kek",
 ) -> Dataset:
-    input_column_name = data_config.input_column_name
+    data_config = get_effective_data_config(data_config, split)
+    # Honour the multi-choice hack: if `processed_input_column_name` is set
+    # (the loader builds a `messages` column for multi-choice-qa), use that.
+    input_column_name = (
+        data_config.get("processed_input_column_name")
+        or data_config.input_column_name
+    )
     output_column_name = get_output_column_name_for_phase(
         output_column_name=data_config.output_column_name, purpose=split
     )

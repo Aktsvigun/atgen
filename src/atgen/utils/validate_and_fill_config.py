@@ -72,11 +72,20 @@ def validate_and_fill_config(config: DictConfig) -> DictConfig:
                 force_add=True,
             )
         if "test_output_column_name" not in config.data:
+            # When `eval_dataset` overrides the test source, derive the test
+            # output column from the overlay (it usually has its own schema).
+            eval_overlay = config.data.get("eval_dataset")
+            test_source = (
+                config.data.output_column_name
+                if eval_overlay is None
+                or eval_overlay.get("output_column_name") is None
+                else eval_overlay.output_column_name
+            )
             OmegaConf.update(
                 config,
                 "data.test_output_column_name",
                 get_output_column_name_for_phase(
-                    config.data.output_column_name, OUTPUT_FIELD_PURPOSE_TEST
+                    test_source, OUTPUT_FIELD_PURPOSE_TEST
                 ),
                 force_add=True,
             )

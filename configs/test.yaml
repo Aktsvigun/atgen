@@ -22,7 +22,7 @@ al:
     budget:
 
 model:
-    checkpoint: Qwen/Qwen3-0.6B
+    checkpoint: Qwen/Qwen3-1.7B
     quantize: False
     model_max_length: ${multiply_with_few_shot:${data.input_max_length},${data.few_shot.count}}
     dtype: bfloat16
@@ -60,12 +60,17 @@ inference:
     framework: 'transformers'
     max_new_tokens: ${data.output_max_length}
     batch_size: 8
-    gpu_memory_utilization: 0.5
-    temperature: 0.6
-    top_p: 0.1
+    gpu_memory_utilization: 0.25
+    temperature: 1.0
+    top_p: 1.0
+    top_k: 20
+    presence_penalty: 2.0
+    enable_thinking: False
+    seed: ${seed}
     model: ${model.checkpoint}
     num_display_generations: 0
     num_threads_for_bfcl: 32
+    model_max_length: ${model.model_max_length}
 
 evaluation:
     additional_metrics: []
